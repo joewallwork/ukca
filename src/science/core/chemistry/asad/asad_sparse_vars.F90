@@ -81,23 +81,24 @@ SUBROUTINE setup_spfuljac()
 !
 ! 1. Create nonzero_map(1:jpcspf,1:jpcspf) and base_tracer(1:spfjsize_max)
 !
-!    nonzero_map(1:jpcspf,1:jpcspf) is an integer indexing array such that
-!    spfj(nonzero_map(i,j)) = A(i,j) where A is dense Jacobian matrix and
-!    spfj is the compressed (sparse) storage of the dense Jacobian matrix.
+!    nonzero_map(1:jpcspf,1:jpcspf) is an integer indexing array such that, for
+!    a given species index jl, spfj(jl,nonzero_map(i,j)) = A(i,j), where A is
+!    the dense Jacobian matrix for species jl and spfj is the compressed
+!    (sparse) storage of the dense Jacobian matrix.
 !
-! 2. Create nonzero_map_unordered(1:jpcspf,1:jpcspf)
+! 2. Create permuted_nonzero_map(1:jpcspf,1:jpcspf)
 !
-!    nonzero_map_unordered(1:jpcspf,1:jpcspf) is an integer indexing array such
-!    that spfj(nonzero_map_unordered(i,j)) = (PAP')(i,j) where (PAP')(i,j) is
+!    permuted_nonzero_map(1:jpcspf,1:jpcspf) is an integer indexing array such
+!    that spfj(jl,permuted_nonzero_map(i,j)) = (PAP')(i,j) where (PAP')(i,j) is
 !    the (i,j) entry of the matrix matmul(P,matmul(A,transpose(P))) where P is
 !    the permutation matrix and A is the dense Jacobian.
 !
 ! 3. Check number of nonzero entries in LU factorization of the dense Jacobian
 !
-!    Gaussian-elimination is used to solve a linear equation in splinslv2 and
+!    Gaussian elimination is used to solve a linear equation in splinslv2 and
 !    the array spfj is used to hold the LU factorization. This section checks
-!    that when this LU factorization is done the spfj array is sufficiently
-!    large enough to hold the nonzero entries of the LU factorization.
+!    that when this LU factorization is done the spfj array is large enough to
+!    hold the nonzero entries of the LU factorization.
 !
 ! 4. Calculate product and loss indexing arrays for Jacobian
 !
@@ -106,7 +107,7 @@ SUBROUTINE setup_spfuljac()
 
 USE asad_mod, ONLY: specf, frpx, jpcspf, jpfrpx, jpmsp, jpspec,                &
                     madvtr, modified_map, ndepd, ndepw, nfrpx, njcoth, nltrf,  &
-                    nmsjac, nmzjac, nonzero_map, nonzero_map_unordered,        &
+                    nmsjac, nmzjac, nonzero_map, permuted_nonzero_map,        &
                     npdfr, nsjac1, nstst, ntabpd, ntrf, ntro3, nzjac1,         &
                     reorder, spfjsize_max, maxterms, maxfterms,                &
                     nposterms, nnegterms, nfracterms, posterms, negterms,      &
@@ -249,7 +250,7 @@ DO i = 1, jpcspf
 END DO
 
 ! ------------------------------------------------------------------------------
-! Section 2: Create nonzero_map_unordered (index array for PAP')
+! Section 2: Create permuted_nonzero_map (index array for PAP')
 ! ------------------------------------------------------------------------------
 
 ! Reorder species by their reactivity to minimize fill-in
@@ -288,11 +289,11 @@ DO i = 1, jpcspf
   permute(i,reorder(i)) = 1
 END DO
 
-! Calculate the index array nonzero_map_unordered such that
-! spfj(nonzero_map_unordered(i,j)) = P*A*P'(i,j)
+! Calculate the index array permuted_nonzero_map such that
+! spfj(permuted_nonzero_map(i,j)) = P*A*P'(i,j)
 ! where P is the permutation matrix and A is the dense Jacobian matrix
 ! with spfj the compressed storage (sparse) array for matrix A.
-nonzero_map_unordered = MATMUL(MATMUL(permute, nonzero_map), TRANSPOSE(permute))
+permuted_nonzero_map = MATMUL(MATMUL(permute, nonzero_map), TRANSPOSE(permute))
 
 IF (ALLOCATED(permute)) DEALLOCATE(permute)
 IF (ALLOCATED(map))     DEALLOCATE(map)
@@ -304,7 +305,7 @@ IF (ALLOCATED(map))     DEALLOCATE(map)
 ! Calculate the number of nonzero matrix elements in the LU factorization of the
 ! array PAP' and check that it is less than spfjsize_max.
 total1 = total
-modified_map(:,:) = nonzero_map_unordered(:,:)
+modified_map(:,:) = permuted_nonzero_map(:,:)
 DO kr = 1, jpcspf
   DO i = kr+1, jpcspf
     ikr = modified_map(i,kr)
@@ -594,9 +595,9 @@ END SUBROUTINE spfuljac
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 SUBROUTINE splinslv2(n_points, bb, xx, min_pivot, max_val,                     &
-                     nonzero_map_unordered, modified_map, spfj)
+                     permuted_nonzero_map, spfj)
 
-USE asad_mod, ONLY: jpcspf, spfjsize_max, total
+USE asad_mod, ONLY: jpcspf, modified_map, spfjsize_max, total
 USE parkind1, ONLY: jprb, jpim
 USE yomhook, ONLY: lhook, dr_hook
 
@@ -629,8 +630,7 @@ REAL, INTENT(IN OUT)    :: bb(n_points,jpcspf)
 REAL, INTENT(OUT)       :: xx(n_points,jpcspf)
 REAL, INTENT(IN)        :: min_pivot
 REAL, INTENT(IN)        :: max_val
-INTEGER, INTENT(IN)     :: nonzero_map_unordered(jpcspf,jpcspf)
-INTEGER, INTENT(IN OUT) :: modified_map(jpcspf,jpcspf)
+INTEGER, INTENT(IN)     :: permuted_nonzero_map(jpcspf,jpcspf)
 REAL, INTENT(IN OUT)    :: spfj(1:n_points,1:spfjsize_max)
 
 ! Local variables
@@ -646,8 +646,9 @@ INTEGER :: ij
 REAL :: bb1(n_points,jpcspf)
 REAL :: xx1(n_points,jpcspf)
 
+REAL :: multiplier(n_points)
 REAL :: pivot(n_points)
-REAL :: kfact(n_points)
+REAL :: lower(n_points)
 
 INTEGER(KIND=jpim), PARAMETER :: zhook_in  = 0
 INTEGER(KIND=jpim), PARAMETER :: zhook_out = 1
@@ -656,6 +657,9 @@ REAL(KIND=jprb)               :: zhook_handle
 CHARACTER(LEN=*), PARAMETER :: RoutineName='SPLINSLV2'
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
+
+! NOTE: splinslv2 is always preceded by spfuljac, which computes spfj to be a sparse (compressed)
+!       representation of the Jacobian matrix for each species.
 
 ! Filter sparse Jacobian
 #if defined(IBM_XL_FORTRAN)
@@ -674,42 +678,70 @@ DO j = 1, total
 END DO
 #endif
 
+OPEN(UNIT=11, FILE="modified_map.dat", STATUS="new")
+DO i = 1, jpcspf
+  WRITE(UNIT=11, FMT=*) modified_map(i,:)
+END DO
+CLOSE(UNIT=11)
 
 ! Section 1: Determine L U factors such that L U = P A P'
-! The L U factors are overwritten onto the original sparse Jacobian array
+!
+! The L U factors are overwritten onto the original sparse Jacobian array. That is, for each species
+! index jl, the upper triangular part of the matrix represented by spfj(jl,:) holds the U factor and
+! the strictly lower triangular part holds the L factor below its unit diagonal.
+!
+! The modified_map is used to record how rows are pivoted, thereby encoding the permutation.
 total1 = total
-modified_map(:,:) = nonzero_map_unordered(:,:)
+modified_map(:,:) = permuted_nonzero_map(:,:)
+! Loop over rows for pivoting
 DO kr = 1, jpcspf
-  pivot(:) = spfj(:,modified_map(kr,kr))
-  WHERE (ABS(pivot) > min_pivot)
-    pivot(:) = 1.0 / pivot
+  ! The multipliers are the diagonal entries for each species
+  multiplier(:) = spfj(:,modified_map(kr,kr))
+  WHERE (ABS(multiplier) > min_pivot)
+    ! If the pivot is sufficiently large then take its reciprocal
+    pivot(:) = 1.0 / multiplier
   ELSE WHERE
+    ! Otherwise, take the largest permissible number
     pivot(:) = max_val
   END WHERE
-  !        PIVOT = 1./spfj(:,modified_map(kr,kr))
+  ! Loop over rows below diagonal
   DO i = kr+1, jpcspf
     ikr = modified_map(i,kr)
+    ! In the case of reactivity...
     IF (ikr > 0) THEN
-      kfact = spfj(:,ikr)*pivot
-      spfj(:,ikr) = kfact
+      ! Lower diagonal part given by multiplying by the pivot
+      lower(:) = spfj(:,ikr)*pivot
+      ! Store the lower diagonal part below the diagonal in spfj
+      spfj(:,ikr) = lower
+      ! Loop over columns above the diagonal
       DO j = kr+1, jpcspf
         krj = modified_map(kr,j)
         IF (krj > 0) THEN
           ij = modified_map(i,j)
-          ! Distinguish whether matrix element is zero or not. If not, proceed
-          ! as in dense case. If it is, create new matrix element.
           IF (ij > 0) THEN
-            spfj(:,ij) = spfj(:,ij) - kfact*spfj(:,krj)
+            ! If the matrix entry is non-zero then compute the contribution
+            ! towards the upper triangular part and store it above the diagonal
+            ! in spfj
+            spfj(:,ij) = spfj(:,ij) - lower*spfj(:,krj)
           ELSE
+            ! If the matrix entry is zero then create a new non-zero and record
+            ! this in modified_map. Note that the L and U factors do not usually
+            ! have the same sparsity pattern as the original matrix.
             total1 = total1 + 1
             modified_map(i,j) = total1
-            spfj(:,total1) = -kfact*spfj(:,krj)
+            spfj(:,total1) = -lower*spfj(:,krj)
           END IF
         END IF
       END DO
     END IF
   END DO
 END DO
+
+OPEN(UNIT=12, FILE="modified_map_factorised.dat", STATUS="new")
+DO i = 1, jpcspf
+  WRITE(UNIT=12, FMT=*) modified_map(i,:)
+END DO
+CLOSE(UNIT=12)
 
 ! Filter sparse Jacobian
 #if defined(IBM_XL_FORTRAN)
@@ -730,7 +762,7 @@ END DO
 
 
 ! Section 2: Solve P A P' z = P b with P'z = x using L U z = P b
-CALL spresolv2(n_points, bb, xx, min_pivot, modified_map, spfj, max_val)
+CALL spresolv2(n_points, bb, xx, min_pivot, spfj, max_val)
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
 RETURN
@@ -738,7 +770,7 @@ END SUBROUTINE splinslv2
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-SUBROUTINE spresolv2(n_points, bb, xx, min_pivot, modified_map, spfj, max_val)
+SUBROUTINE spresolv2(n_points, bb, xx, min_pivot, spfj, max_val)
 
 ! This subroutine determines x where L U z = P b with P' z = x
 ! The L U factors are supplied to this routine and contained with spfj array.
@@ -749,7 +781,7 @@ SUBROUTINE spresolv2(n_points, bb, xx, min_pivot, modified_map, spfj, max_val)
 ! Part (c) back-substitution: find z where U z = w
 ! Part (d) determine x, apply transpose(P) to z, P'z = x
 
-USE asad_mod, ONLY: jpcspf, reorder, spfjsize_max
+USE asad_mod, ONLY: jpcspf, modified_map, reorder, spfjsize_max
 USE parkind1, ONLY: jprb, jpim
 USE yomhook, ONLY: lhook, dr_hook
 
@@ -760,7 +792,6 @@ INTEGER, INTENT(IN)  :: n_points
 REAL,    INTENT(IN)  :: bb(n_points,jpcspf)
 REAL,    INTENT(OUT) :: xx(n_points,jpcspf)
 REAL,    INTENT(IN)  :: min_pivot
-INTEGER, INTENT(IN)  :: modified_map(jpcspf,jpcspf)
 REAL,    INTENT(IN)  :: spfj(n_points,spfjsize_max)
 
 ! Maximum tolerated value for use in filtering step. Unused if negative
