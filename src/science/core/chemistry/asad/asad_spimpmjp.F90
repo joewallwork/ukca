@@ -252,11 +252,12 @@ END SUBROUTINE calc_error_norm
 ! *********************************************************************
 
 SUBROUTINE asad_spimpmjp(exit_code, ix, jy, nlev, n_points, location,          &
-                         solver_iter)
+                         solver_iter, ncst)
 
 USE asad_mod,           ONLY: ptol, peps, cdt, f, fdot, nitnr, nstst, y,       &
                               fj, nonzero_map, ltrig, jpcspf, spfj,            &
-                              modified_map, nonzero_map_unordered
+                              modified_map, nonzero_map_unordered,             &
+                              predict_halving_steps, ncsteps
 USE asad_sparse_vars,   ONLY: setup_spfuljac, spfuljac, spresolv2, splinslv2
 USE ukca_config_specification_mod, ONLY: ukca_config
 USE yomhook,            ONLY: lhook, dr_hook
@@ -280,6 +281,7 @@ INTEGER, INTENT(IN) :: nlev
 INTEGER, INTENT(IN) :: location
 INTEGER, INTENT(OUT):: exit_code
 INTEGER, INTENT(OUT):: solver_iter ! No. of iterations
+INTEGER, INTENT(IN OUT) :: ncst     ! No. of chemistry steps
 
 ! Local variables
 INTEGER, PARAMETER :: maxneg=2000     ! Max No. negatives allowed
@@ -323,6 +325,8 @@ REAL :: delta_G(n_points,jpcspf)
 REAL :: coeff
 
 REAL :: zsum(jpcspf) ! Diagnostic output, sum of f_initial across all points
+
+INTEGER :: ncsteps_pred ! Predicted number of chemistry timesteps
 
 INTEGER(KIND=jpim), PARAMETER :: zhook_in  = 0
 INTEGER(KIND=jpim), PARAMETER :: zhook_out = 1
@@ -463,6 +467,19 @@ DO iter=1,ukca_config%nrsteps
     END DO
   END IF
 
+  IF (predict_halving_steps .AND. ANY(ncst == ncsteps)) THEN
+
+    ! Solve an eigenvalue problem in each grid-box to predict the timestep
+    CALL predict_ncsteps(n_points,modified_map,spfj,ncsteps_pred)
+
+    ! Return early if timestep halvings are suggested
+    IF (ncsteps_pred > ncst) THEN
+      ncst = ncsteps_pred
+      RETURN
+    END IF
+
+  END IF
+
   CALL splinslv2(n_points,G_f,f_incr,f_min,f_max,nonzero_map_unordered,        &
                     modified_map,spfj)
 
@@ -598,5 +615,110 @@ END IF
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
 RETURN
 END SUBROUTINE asad_spimpmjp
+
+SUBROUTINE predict_ncsteps(n_points,modified_map,spfj,ncsteps_pred)
+USE asad_mod, ONLY: jpspec, spfjsize_max
+USE slepceps
+
+IMPLICIT NONE
+
+PetscInt,    INTENT(IN)  :: modified_map(jpspec,jpspec)
+PetscScalar, INTENT(IN)  :: spfj(n_points, spfjsize_max)
+PetscInt,    INTENT(OUT) :: ncsteps_pred
+
+! Constants
+PetscInt, PARAMETER    :: one = 1
+PetscScalar, PARAMETER :: zero = 0.0
+PetscScalar, PARAMETER :: log2 = LOG(2.0)
+PetscScalar, PARAMETER :: delta = 2700.0 ! Scaling parameter for predictor
+
+Mat                 :: a       ! Operator matrix
+eps                 :: eps     ! Eigenproblem solver context
+PetscInt            :: row(1)  ! Array for passing a row index to SLEPc
+PetscInt            :: col(1)  ! Array for passing a column index to SLEPc
+PetscScalar         :: val(1)  ! Array for passing a matrix entry to SLEPc
+PetscScalar         :: lambda2 ! 2nd smallest absolute eigenvalue real part
+PetscErrorCode      :: ierr    ! Error code to be checked by PETSc
+
+PetscInt            :: ncsteps(n_points) ! Array of predictions
+
+! Index variables
+PetscInt :: i
+PetscInt :: j
+PetscInt :: jl
+PetscInt :: js
+
+INTEGER(KIND=jpim), PARAMETER :: zhook_in  = 0
+INTEGER(KIND=jpim), PARAMETER :: zhook_out = 1
+REAL(KIND=jprb)               :: zhook_handle
+CHARACTER(LEN=*),   PARAMETER :: RoutineName='PREDICT_NCSTEPS'
+
+IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
+
+! Initialise and parse user input
+PetscCallA(SlepcInitialize(petsc_null_character, "ncsteps"//C_NEW_LINE, ierr))
+
+! Create the Mat matrix
+! TODO: Set the sparsity pattern of the matrix for efficiency
+PetscCallA(MatCreate(petsc_comm_world, a, ierr))
+PetscCallA(MatSetSizes(a, petsc_decide, petsc_decide, jpspec, jpspec, ierr))
+PetscCallA(MatSetFromOptions(a, ierr))
+PetscCallA(MatAssemblyBegin(a, mat_final_assembly, ierr))
+PetscCallA(MatAssemblyEnd(a, mat_final_assembly, ierr))
+
+! Create the EPS eigensolver
+PetscCallA(EPSCreate(petsc_comm_world, eps, ierr))
+PetscCallA(EPSSetDimensions(eps, jpspec, petsc_determine, petsc_determine, ierr))
+PetscCallA(EPSSetProblemType(eps, eps_nhep, ierr)) ! Non-Hermitian matrix
+
+! NOTE: Order eigenvalues by increasing abs real part
+PetscCallA(EPSSetWhichEigenpairs(eps, 8, ierr))    ! min |Re(lambda - tau)|
+PetscCallA(EPSSetTarget(eps, zero, ierr))          ! where tau = 0
+
+! Loop over all grid-boxes in the chunk
+DO jl = 1, n_points
+
+  ! Update the operator matrix
+  DO j = 1, jpspec
+    DO i = 1, jpspec
+      js = modified_map(i,j)
+      IF (js > 0) THEN
+        ! NOTE: SLEPc indexes from zero
+        row(1) = i - 1
+        col(1) = j - 1
+        val(1) = spfj(jl,js)
+        PetscCallA(MatSetValues(a, one, row, one, col, val, insert_values, ierr))
+      END IF
+    END DO
+  END DO
+  PetscCallA(MatAssemblyBegin(a, mat_final_assembly, ierr))
+  PetscCallA(MatAssemblyEnd(a, mat_final_assembly, ierr))
+  PetscCallA(EPSSetOperators(eps, a, petsc_null_mat, ierr))
+
+  ! Solve the eigensystem
+  PetscCallA(EPSSolve(eps, ierr))
+
+  ! Extract the second-smallest eigenvalue absolute real part
+  ! NOTE: '1' indicates second-smallest because SLEPc indexes from zero
+  PetscCallA(EPSGetEigenvalue(eps, 1, lambda2, petsc_null_scalar, ierr))
+
+  ! Predict the number of halving steps using the formula
+  prediction = MAX(CEILING(LOG(ABS(lambda2) * delta) / log2), 0)
+
+  ! Convert this to the number of chemistry timesteps
+  ncsteps(jl) = 2 ** prediction
+END DO
+
+! Cleanup and finalise
+PetscCallA(EPSDestroy(eps, ierr))
+PetscCallA(MatDestroy(a, ierr))
+PetscCallA(SlepcFinalize(ierr))
+
+! Take the maximum over the chunk
+ncsteps_pred = MAXVAL(ncsteps)
+
+IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
+RETURN
+END SUBROUTINE predict_ncsteps
 
 END MODULE asad_spimpmjp_mod

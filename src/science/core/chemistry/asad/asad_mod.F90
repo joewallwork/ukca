@@ -347,6 +347,9 @@ INTEGER :: jsro2                           ! Index for summed RO2 concentration
 
 LOGICAL :: ljacx
 
+! TODO: Set up properly as a configurable parameter
+LOGICAL :: predict_halving_steps = .TRUE.
+
 ! ltrig set to debug slow convergence systems
 ! shared between asad_spimpmjp and asad_spmjpdriv
 LOGICAL :: ltrig

@@ -106,7 +106,7 @@ CONTAINS
 SUBROUTINE asad_spmjpdriv(ix,jy,nlev,n_points,num_iter)
 
 USE asad_mod, ONLY: cdt, f, jpcspf, jpspec, ltrig,                             &
-                    ncsteps, nitfg, speci, y
+                    ncsteps, nitfg, speci, y, predict_halving_steps
 USE ukca_config_specification_mod, ONLY: ukca_config
 USE parkind1, ONLY: jprb, jpim
 USE yomhook, ONLY: lhook, dr_hook
@@ -134,6 +134,7 @@ INTEGER, INTENT(OUT) :: num_iter ! added iteration counter
 INTEGER, PARAMETER :: max_redo=128      ! Max times for halving TS, was 16
 INTEGER :: exit_code                        ! Convergence exit code
 INTEGER :: ncst
+INTEGER :: ncst1
 INTEGER :: iredo
 INTEGER :: jl
 INTEGER :: iter
@@ -176,8 +177,17 @@ END IF
 num_iter = 0
 iter = 1
 DO WHILE (iter <= iredo)
-  CALL asad_spimpmjp(exit_code, ix, jy, nlev, n_points, location, solver_iter)
+  ncst1 = ncst
+  CALL asad_spimpmjp(exit_code, ix, jy, nlev, n_points, location, solver_iter, &
+                     ncst)
   num_iter = num_iter + solver_iter
+
+  ! Reduce the timestep if the prediction suggests it
+  IF (predict_halving_steps .AND. (ncst1 /= ncst)) THEN
+    ncsteps = ncst
+    cdt = ctrd / (ncst / ncst1)
+    GO TO 9999
+  END IF
 
   !  Debug slow convergence systems - switch this on in 'spimpmjp'
   IF (exit_code == 4) THEN
@@ -202,6 +212,11 @@ DO WHILE (iter <= iredo)
     !
     !  Reset for failed convergence
     IF (exit_code > 1) THEN
+      IF (predict_halving_steps) THEN
+        errcode=5
+        cmessage=' Halving step prediction failed'
+        CALL ereport('ASAD_SPMJPDRIV',errcode,cmessage)
+      END IF
       ncsteps = ncsteps*2
       cdt = cdt/2.0
       iredo = iredo*2
