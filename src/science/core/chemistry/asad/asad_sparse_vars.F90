@@ -104,13 +104,15 @@ SUBROUTINE setup_spfuljac()
 !    posterms, negterms and fracterms are used in calculating the values for
 !    the Jacobian matrix.
 
-USE asad_mod, ONLY: specf, frpx, jpcspf, jpfrpx, jpmsp, jpspec,                &
+USE asad_mod, ONLY: specf, speci, frpx, jpcspf, jpfrpx, jpmsp, jpspec,         &
                     madvtr, modified_map, ndepd, ndepw, nfrpx, njcoth, nltrf,  &
                     nmsjac, nmzjac, nonzero_map, nonzero_map_unordered,        &
                     npdfr, nsjac1, nstst, ntabpd, ntrf, ntro3, nzjac1,         &
                     reorder, spfjsize_max, maxterms, maxfterms,                &
                     nposterms, nnegterms, nfracterms, posterms, negterms,      &
-                    fracterms, base_tracer, ffrac, ztabpd, total
+                    fracterms, base_tracer, ffrac, ztabpd, total,              &
+                    write_nc_int32_1d, write_nc_int32_2d, save_inputs, advt,   &
+                    nadvt, jpctr, spj, jppj, jpspj
 USE parkind1, ONLY: jprb, jpim
 USE yomhook, ONLY: lhook, dr_hook
 USE ereport_mod, ONLY: ereport
@@ -158,6 +160,8 @@ CHARACTER(LEN=errormessagelength) :: cmessage
 INTEGER(KIND=jpim), PARAMETER :: zhook_in  = 0
 INTEGER(KIND=jpim), PARAMETER :: zhook_out = 1
 REAL(KIND=jprb)               :: zhook_handle
+
+LOGICAL, SAVE :: written_out = .FALSE.
 
 CHARACTER(LEN=*), PARAMETER :: RoutineName='SETUP_SPFULJAC'
 
@@ -336,6 +340,39 @@ DO kr=1,jpcspf
     END IF
   END DO
 END DO
+
+! Write ordering, sparsity pattern, and species to file, if requested
+IF (save_inputs .AND. .NOT. written_out) THEN
+  CALL write_nc_int32_1d("reorder", reorder)
+  CALL write_nc_int32_2d("modified_map", modified_map)
+  OPEN(UNIT=11, FILE="speci.dat")
+  DO i = 1, jpspec
+    WRITE(UNIT=11, FMT="(A10)") speci(i)
+  END DO
+  CLOSE(UNIT=11)
+  OPEN(UNIT=12, FILE="advt.dat")
+  DO i = 1, jpctr
+    WRITE(UNIT=12, FMT="(A10)") advt(i)
+  END DO
+  CLOSE(UNIT=12)
+  OPEN(UNIT=13, FILE="nadvt.dat")
+  DO i = 1, (jpspec-jpctr)
+    WRITE(UNIT=13, FMT="(A10)") nadvt(i)
+  END DO
+  CLOSE(UNIT=13)
+  OPEN(UNIT=14, FILE="spj.dat")
+  DO i = 1, jppj+1
+    DO j = 1, jpspj
+      IF (j < jpspj) THEN
+        WRITE(UNIT=14, FMT="(A10,',')", ADVANCE="no") spj(i,j)
+      ELSE
+        WRITE(UNIT=14, FMT="(A10)") spj(i,j)
+      END IF
+    END DO
+  END DO
+  CLOSE(UNIT=14)
+  written_out = .TRUE.
+END IF
 
 ! Perform error check outside of the loop to better suit GPU runs
 IF (total1 > spfjsize_max) THEN

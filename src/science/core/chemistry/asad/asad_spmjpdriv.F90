@@ -106,7 +106,7 @@ CONTAINS
 SUBROUTINE asad_spmjpdriv(ix,jy,nlev,n_points,num_iter)
 
 USE asad_mod, ONLY: cdt, f, jpcspf, jpspec, ltrig,                             &
-                    ncsteps, nitfg, speci, y
+                    ncsteps, ncsteps_full, save_inputs, nitfg, speci, y
 USE ukca_config_specification_mod, ONLY: ukca_config
 USE parkind1, ONLY: jprb, jpim
 USE yomhook, ONLY: lhook, dr_hook
@@ -245,6 +245,12 @@ DO WHILE (iter <= iredo)
     END IF
   END IF
 END DO
+
+! Stash the number of chemistry steps for a single grid-box, if requested
+IF (save_inputs .AND. ukca_config%l_ukca_asad_columns                          &
+    .AND. ukca_config%ukca_chem_seg_size == 1) THEN
+  ncsteps_full(ix,jy,nlev) = ncsteps
+END IF
 
 IF (iredo > 1) THEN
   IF (iredo > 2) THEN

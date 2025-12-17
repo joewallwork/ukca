@@ -261,6 +261,12 @@ INTEGER, SAVE :: maxterms      ! maximum number of nonzero
 INTEGER, SAVE :: maxfterms     ! maximum number of terms
                                ! involving fractional  products
 
+INTEGER, SAVE        :: timestep_iter = 0  ! timestepper iteration
+LOGICAL, PARAMETER   :: save_inputs = .TRUE.
+INTEGER, ALLOCATABLE :: ncsteps_full(:,:,:)
+REAL, ALLOCATABLE    :: spfj_full(:,:,:,:)
+REAL, ALLOCATABLE    :: bb_full(:,:,:,:)
+
 !---------------------------------------------------------------------
 ! Production and loss Arrays ALLOCATABLE to be able to use flexible
 ! Jacobian size. Must be saveable as only defined once in setup_spfuljac,
@@ -548,6 +554,15 @@ IF (method == int_method_NR) THEN
   IF (.NOT. ALLOCATED(nonzero_map))  ALLOCATE(nonzero_map(jpcspf, jpcspf))
   IF (.NOT. ALLOCATED(reorder))  ALLOCATE(reorder(jpcspf))
 
+  IF (.NOT. ALLOCATED(ncsteps_full)) THEN
+    ALLOCATE(ncsteps_full(ukca_config%row_length, ukca_config%rows,            &
+                          ukca_config%model_levels))
+  END IF
+  IF (.NOT. ALLOCATED(bb_full)) THEN
+    ALLOCATE(bb_full(ukca_config%row_length, ukca_config%rows,                 &
+                     ukca_config%model_levels, jpcspf))
+  END IF
+
   ! allocate arrays required by solver. These should only be done once, and not
   ! deallocated (hence no matching deallocate statements).
   ! Set size of arrays for NR solver. Needs to be larger for CRI-Strat
@@ -572,6 +587,11 @@ IF (method == int_method_NR) THEN
   IF (.NOT. ALLOCATED(fracterms))   ALLOCATE(fracterms(spfjsize_max, maxfterms))
   IF (.NOT. ALLOCATED(base_tracer)) ALLOCATE(base_tracer(spfjsize_max))
   IF (.NOT. ALLOCATED(ffrac))       ALLOCATE(ffrac(spfjsize_max, maxfterms))
+
+  IF (.NOT. ALLOCATED(spfj_full)) THEN
+    ALLOCATE(spfj_full(ukca_config%row_length, ukca_config%rows,               &
+                       ukca_config%model_levels, spfjsize_max))
+  END IF
 END IF
 
 !$OMP END SINGLE
@@ -814,5 +834,575 @@ IF (ALLOCATED(pd)) DEALLOCATE(pd)
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
 
 END SUBROUTINE asad_mod_dealloc_spatial_vars
+
+SUBROUTINE write_nc_int32_1d(variable, array)
+USE errormessagelength_mod, ONLY: errormessagelength
+USE ereport_mod, ONLY: ereport
+USE umPrintMgr, ONLY: umMessage, umPrint
+USE netcdf, ONLY: nf90_clobber, nf90_close, nf90_create, nf90_def_dim,         &
+                  nf90_def_var, nf90_enddef, nf90_int, nf90_put_var,           &
+                  nf90_noerr
+IMPLICIT NONE
+CHARACTER(LEN=*), INTENT(IN) :: variable
+INTEGER, INTENT(IN) :: array(:)
+CHARACTER(LEN=32) :: filename
+INTEGER(KIND=4) :: ncid, varid, dimids(1), retval, nx
+INTEGER :: errcode
+CHARACTER(LEN=errormessagelength) :: cmessage
+CHARACTER(LEN=*), PARAMETER :: RoutineName='write_nc_int32_1d'
+
+! Determine the filename
+WRITE(UNIT=filename, FMT="(A27,'_',I0,'.nc')") TRIM(variable), timestep_iter
+
+! Create a new NetCDF file
+retval = nf90_create(TRIM(filename), nf90_clobber, ncid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to create NetCDF file'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Define the dimensions
+nx = SIZE(array, 1)
+retval = nf90_def_dim(ncid, "x", nx, dimids(1))
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to define dimension x'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Define the variable
+retval = nf90_def_var(ncid, TRIM(variable), nf90_int, dimids, varid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to define variable'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! End define mode
+retval = nf90_enddef(ncid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to end define mode'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Write the array to the file
+retval = nf90_put_var(ncid, varid, array)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to write the array to file'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Close the NetCDF file
+retval = nf90_close(ncid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to close the file'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+END SUBROUTINE write_nc_int32_1d
+
+SUBROUTINE write_nc_int32_2d(variable, array)
+USE errormessagelength_mod, ONLY: errormessagelength
+USE ereport_mod, ONLY: ereport
+USE umPrintMgr, ONLY: umMessage, umPrint
+USE netcdf, ONLY: nf90_clobber, nf90_close, nf90_create, nf90_def_dim,         &
+                  nf90_def_var, nf90_enddef, nf90_int, nf90_put_var,           &
+                  nf90_noerr
+IMPLICIT NONE
+CHARACTER(LEN=*), INTENT(IN) :: variable
+INTEGER, INTENT(IN) :: array(:,:)
+CHARACTER(LEN=32) :: filename
+INTEGER(KIND=4) :: ncid, varid, dimids(2), retval, nx, ny
+INTEGER :: errcode
+CHARACTER(LEN=errormessagelength) :: cmessage
+CHARACTER(LEN=*), PARAMETER :: RoutineName='write_nc_int32_2d'
+
+! Determine the filename
+WRITE(UNIT=filename, FMT="(A27,'_',I0,'.nc')") TRIM(variable), timestep_iter
+
+! Create a new NetCDF file
+retval = nf90_create(TRIM(filename), nf90_clobber, ncid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to create NetCDF file'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Define the dimensions
+nx = SIZE(array, 1)
+retval = nf90_def_dim(ncid, "x", nx, dimids(1))
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to define dimension x'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+ny = SIZE(array, 2)
+retval = nf90_def_dim(ncid, "y", ny, dimids(2))
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to define dimension y'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Define the variable
+retval = nf90_def_var(ncid, TRIM(variable), nf90_int, dimids, varid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to define variable'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! End define mode
+retval = nf90_enddef(ncid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to end define mode'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Write the array to the file
+retval = nf90_put_var(ncid, varid, array)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to write the array to file'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Close the NetCDF file
+retval = nf90_close(ncid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to close the file'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+END SUBROUTINE write_nc_int32_2d
+
+SUBROUTINE write_nc_int32_3d(variable, array)
+USE errormessagelength_mod, ONLY: errormessagelength
+USE ereport_mod, ONLY: ereport
+USE umPrintMgr, ONLY: umMessage, umPrint
+USE netcdf, ONLY: nf90_clobber, nf90_close, nf90_create, nf90_def_dim,         &
+                  nf90_def_var, nf90_enddef, nf90_int, nf90_put_var,           &
+                  nf90_noerr
+IMPLICIT NONE
+CHARACTER(LEN=*), INTENT(IN) :: variable
+INTEGER, INTENT(IN) :: array(:,:,:)
+CHARACTER(LEN=32) :: filename
+INTEGER(KIND=4) :: ncid, varid, dimids(3), retval, nx, ny, nz
+INTEGER :: errcode
+CHARACTER(LEN=errormessagelength) :: cmessage
+CHARACTER(LEN=*), PARAMETER :: RoutineName='write_nc_int32_3d'
+
+! Determine the filename
+WRITE(UNIT=filename, FMT="(A27,'_',I0,'.nc')") TRIM(variable), timestep_iter
+
+! Create a new NetCDF file
+retval = nf90_create(TRIM(filename), nf90_clobber, ncid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to create NetCDF file'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Define the dimensions
+nx = SIZE(array, 1)
+retval = nf90_def_dim(ncid, "x", nx, dimids(1))
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to define dimension x'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+ny = SIZE(array, 2)
+retval = nf90_def_dim(ncid, "y", ny, dimids(2))
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to define dimension y'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+nz = SIZE(array, 3)
+retval = nf90_def_dim(ncid, "z", nz, dimids(3))
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to define dimension z'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Define the variable
+retval = nf90_def_var(ncid, TRIM(variable), nf90_int, dimids, varid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to define variable'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! End define mode
+retval = nf90_enddef(ncid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to end define mode'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Write the array to the file
+retval = nf90_put_var(ncid, varid, array)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to write the array to file'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Close the NetCDF file
+retval = nf90_close(ncid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to close the file'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+END SUBROUTINE write_nc_int32_3d
+
+SUBROUTINE write_nc_real64_2d(variable, array)
+USE, INTRINSIC :: ISO_FORTRAN_ENV, ONLY: dp => REAL64
+USE errormessagelength_mod, ONLY: errormessagelength
+USE ereport_mod, ONLY: ereport
+USE umPrintMgr, ONLY: umMessage, umPrint
+USE netcdf, ONLY: nf90_clobber, nf90_close, nf90_create, nf90_def_dim,         &
+                  nf90_def_var, nf90_enddef, nf90_put_var, nf90_noerr,         &
+                  nf90_float
+IMPLICIT NONE
+CHARACTER(LEN=*), INTENT(IN) :: variable
+REAL(dp), INTENT(IN) :: array(:,:)
+CHARACTER(LEN=32) :: filename
+INTEGER(KIND=4) :: ncid, varid, dimids(2), retval, nx, ny
+INTEGER :: errcode
+CHARACTER(LEN=errormessagelength) :: cmessage
+CHARACTER(LEN=*), PARAMETER :: RoutineName='write_nc_real64_2D'
+
+! Determine the filename
+WRITE(UNIT=filename, FMT="(A27,'_',I0,'.nc')") TRIM(variable), timestep_iter
+
+! Create a new NetCDF file
+retval = nf90_create(TRIM(filename), nf90_clobber, ncid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to create NetCDF file'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Define the dimensions
+nx = SIZE(array, 1)
+retval = nf90_def_dim(ncid, "x", nx, dimids(1))
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to define dimension x'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+ny = SIZE(array, 2)
+retval = nf90_def_dim(ncid, "y", ny, dimids(2))
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to define dimension y'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Define the variable
+retval = nf90_def_var(ncid, TRIM(variable), nf90_float, dimids, varid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to define variable'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! End define mode
+retval = nf90_enddef(ncid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to end define mode'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Write the array to the file
+retval = nf90_put_var(ncid, varid, array)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to write the array to file'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Close the NetCDF file
+retval = nf90_close(ncid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to close the file'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+END SUBROUTINE write_nc_real64_2d
+
+SUBROUTINE write_nc_real64_3d(variable, array)
+USE, INTRINSIC :: ISO_FORTRAN_ENV, ONLY: dp => REAL64
+USE errormessagelength_mod, ONLY: errormessagelength
+USE ereport_mod, ONLY: ereport
+USE umPrintMgr, ONLY: umMessage, umPrint
+USE netcdf, ONLY: nf90_clobber, nf90_close, nf90_create, nf90_def_dim,         &
+                  nf90_def_var, nf90_enddef, nf90_put_var, nf90_noerr,         &
+                  nf90_float
+IMPLICIT NONE
+CHARACTER(LEN=*), INTENT(IN) :: variable
+REAL(dp), INTENT(IN) :: array(:,:,:)
+CHARACTER(LEN=32) :: filename
+INTEGER(KIND=4) :: ncid, varid, dimids(3), retval, nx, ny, nz
+INTEGER :: errcode
+CHARACTER(LEN=errormessagelength) :: cmessage
+CHARACTER(LEN=*), PARAMETER :: RoutineName='write_nc_real64_3D'
+
+! Determine the filename
+WRITE(UNIT=filename, FMT="(A27,'_',I0,'.nc')") TRIM(variable), timestep_iter
+
+! Create a new NetCDF file
+retval = nf90_create(TRIM(filename), nf90_clobber, ncid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to create NetCDF file'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Define the dimensions
+nx = SIZE(array, 1)
+retval = nf90_def_dim(ncid, "x", nx, dimids(1))
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to define dimension x'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+ny = SIZE(array, 2)
+retval = nf90_def_dim(ncid, "y", ny, dimids(2))
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to define dimension y'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+nz = SIZE(array, 3)
+retval = nf90_def_dim(ncid, "z", nz, dimids(3))
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to define dimension z'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Define the variable
+retval = nf90_def_var(ncid, TRIM(variable), nf90_float, dimids, varid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to define variable'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! End define mode
+retval = nf90_enddef(ncid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to end define mode'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Write the array to the file
+retval = nf90_put_var(ncid, varid, array)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to write the array to file'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Close the NetCDF file
+retval = nf90_close(ncid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to close the file'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+END SUBROUTINE write_nc_real64_3d
+
+SUBROUTINE write_nc_real64_4d(variable, array)
+USE, INTRINSIC :: ISO_FORTRAN_ENV, ONLY: dp => REAL64
+USE errormessagelength_mod, ONLY: errormessagelength
+USE ereport_mod, ONLY: ereport
+USE umPrintMgr, ONLY: umMessage, umPrint
+USE netcdf, ONLY: nf90_clobber, nf90_close, nf90_create, nf90_def_dim,         &
+                  nf90_def_var, nf90_enddef, nf90_put_var, nf90_noerr,         &
+                  nf90_float
+IMPLICIT NONE
+CHARACTER(LEN=*), INTENT(IN) :: variable
+REAL(dp), INTENT(IN) :: array(:,:,:,:)
+CHARACTER(LEN=32) :: filename
+INTEGER(KIND=4) :: ncid, varid, dimids(4), retval, nx, ny, nz, ns
+INTEGER :: errcode
+CHARACTER(LEN=errormessagelength) :: cmessage
+CHARACTER(LEN=*), PARAMETER :: RoutineName='write_nc_real64_4D'
+
+! Determine the filename
+WRITE(UNIT=filename, FMT="(A27,'_',I0,'.nc')") TRIM(variable), timestep_iter
+
+! Create a new NetCDF file
+retval = nf90_create(TRIM(filename), nf90_clobber, ncid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to create NetCDF file'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Define the dimensions
+nx = SIZE(array, 1)
+retval = nf90_def_dim(ncid, "x", nx, dimids(1))
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to define dimension x'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+ny = SIZE(array, 2)
+retval = nf90_def_dim(ncid, "y", ny, dimids(2))
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to define dimension y'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+nz = SIZE(array, 3)
+retval = nf90_def_dim(ncid, "z", nz, dimids(3))
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to define dimension z'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+ns = SIZE(array, 4)
+retval = nf90_def_dim(ncid, "s", ns, dimids(4))
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to define dimension s'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Define the variable
+retval = nf90_def_var(ncid, TRIM(variable), nf90_float, dimids, varid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to define variable'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! End define mode
+retval = nf90_enddef(ncid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to end define mode'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Write the array to the file
+retval = nf90_put_var(ncid, varid, array)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to write the array to file'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+
+! Close the NetCDF file
+retval = nf90_close(ncid)
+IF (retval /= nf90_noerr) THEN
+  errcode = timestep_iter
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Failed to close the file'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
+END SUBROUTINE write_nc_real64_4d
 
 END MODULE asad_mod
