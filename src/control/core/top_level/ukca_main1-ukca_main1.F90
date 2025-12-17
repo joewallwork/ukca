@@ -170,7 +170,8 @@ USE ukca_um_legacy_mod, ONLY:                                                  &
 USE ukca_humidity_mod,      ONLY: ukca_vmrsat_liq, ukca_vmr_clear_sky
 
 USE asad_mod,               ONLY: nnaf, interval, advt, jpctr, jpspec, jpdd,   &
-                                  jpdw, jppj
+                                  jpdw, jppj, save_inputs, write_nc_real64_2d, &
+                                  timestep_iter
 
 USE ukca_tracer_vars,       ONLY: trmol_post_chem
 USE ukca_cspecies,          ONLY: c_species, c_na_species, n_bro, n_h2o,       &
@@ -2373,6 +2374,11 @@ IF (ukca_config%l_ukca_chem) THEN
            )
 
     ELSE IF (ukca_config%l_ukca_asad_columns) THEN
+
+      timestep_iter = timestep_iter + 1
+      IF (save_inputs) THEN
+        CALL write_nc_real64_2d("sza", int_zenith_angle) 
+      END IF
 
       CALL ukca_chemistry_ctl_col(                                             &
            row_length, rows, model_levels,                                     &

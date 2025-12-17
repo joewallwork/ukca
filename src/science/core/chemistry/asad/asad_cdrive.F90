@@ -33,7 +33,6 @@
 ! This file belongs in section: UKCA
 !
 !     Arguments:
-!        cdot        - Tracer tendencies due to chemistry.
 !        ftr         - Tracer concentrations.
 !        pp          - Pressure (Nm-2).
 !        pt          - Temperature (K).
@@ -90,11 +89,11 @@ CHARACTER(LEN=*), PARAMETER, PRIVATE :: ModuleName = 'ASAD_CDRIVE_MOD'
 
 CONTAINS
 
-SUBROUTINE asad_cdrive(cdot, ftr, pp, pt, pq, co2_1d, cld_f, cld_l,            &
+SUBROUTINE asad_cdrive(ftr, pp, pt, pq, co2_1d, cld_f, cld_l,                  &
                        ix, jy, nlev, dryrt, wetrt, rc_het, prt,                &
                        n_points, have_nat, stratflag, H_plus_1d_arr)
 
-USE asad_mod,        ONLY: cdt, ctype, fdot, f,                                &
+USE asad_mod,        ONLY: ctype, fdot, f,                                     &
                            jpspec, jpcspf, jppj,                               &
                            jpdd, jpdw, jpif, jsubs,                            &
                            linfam, lvmr,                                       &
@@ -155,8 +154,6 @@ REAL, INTENT(IN) :: H_plus_1d_arr(n_points)
 ! rather than number of tracers
 REAL, INTENT(IN OUT) :: ftr(n_points,jpcspf)   ! Tracer concs
 
-REAL, INTENT(OUT)   :: cdot(n_points,jpcspf)  ! Tracer tendencies
-
 !       Local variables
 
 INTEGER :: errcode               ! Variable passed to ereport
@@ -185,26 +182,18 @@ REAL(KIND=jprb)               :: zhook_handle
 CHARACTER(LEN=*), PARAMETER :: RoutineName='ASAD_CDRIVE'
 
 
+IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
+
 !       1.  Initialise variables and arrays
 
-!       1.1   Clear tendencies to avoid contributions from levels
-!             on which no chemistry is performed
-
-IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
-DO jtr = 1, jpcspf
-  DO jl = 1, n_points
-    cdot(jl,jtr) = 0.0
-  END DO
-END DO
-
-!       1.2  Copy pressure and temperature to asad_mod
+!       1.1  Copy pressure and temperature to asad_mod
 
 DO jl = 1, n_points
   p(jl) = pp(jl)
   t(jl) = pt(jl)
 END DO
 
-!       1.2.1 Copy water vapor and co2 to asad_mod
+!       1.1.1 Copy water vapor and co2 to asad_mod
 
 DO jl = 1, n_points
   wp(jl) = pq(jl)
@@ -251,128 +240,98 @@ IF ( ndepd /= 0 ) CALL ukca_drydep(nlev, dryrt, n_points)
 
 !       6.  Integrate chemistry by chosen method. Otherwise,
 !           simply calculate tendencies due to chemistry
-!           ------ --------- ---------- --- -- ---------
+!
+!           NON-STIFF integrators take values in the range 1-9.
+!
+!           STIFF integrators take values in the range 10-19.
+!           -------------------------------------------------
 
 gphot = .TRUE.
-IF ( method /= 0 ) THEN
+nl = n_points
+SELECT CASE (method)
+CASE (0)
+
+  !     6.0  Not integrating: just compute tendencies.
+
+  CALL ukca_photol(prt, nl)
+  IF (ukca_config%l_ukca_het_psc) CALL ukca_hetero(nl, have_nat, stratflag)
+  CALL asad_ftoy(first_call, nit0, num_iter, nl, ix, jy, nlev)
+  CALL asad_diffun(nl)
+  IF (ukca_config%l_ukca_het_psc) THEN
+    CALL ukca_solidphase(nl)
+    CALL asad_posthet()
+  END IF
+
+CASE (1)
+
+  !     6.1  IMPACT integration: first compute heterogeneous
+  !          and photolysis rates, species and tendencies.
+  !          ===============================================
 
   DO js = 1, ncsteps
     jsubs = js
+    gfirst = jsubs == 1
+    IF (nfphot /= 0 .AND. .NOT. gfirst) gphot = MOD(jsubs-1,nfphot) == 0
 
-    gfirst = jsubs  ==  1
-    gphot  = gfirst
-    IF ( nfphot /= 0 .AND. .NOT. gfirst )                                      &
-                  gphot = MOD(jsubs-1,nfphot) == 0
-
-    !           ---------------------------------------------------
-    !           NON-STIFF integrators take values in the range 1-9.
-    !           ---------------------------------------------------
-
-    !           6.1  IMPACT integration: first compute heterogeneous
-    !                and photolysis rates, species and tendencies.
-    !                ===============================================
-
-    nl = n_points
-
-    ! pass num_iter to asad_spmjpdriv and asad_ftoy
+    ! pass num_iter to asad_ftoy
     num_iter=0
 
-    IF ( method == 1 ) THEN
-      IF ( gphot ) CALL ukca_photol(prt,n_points)
-      IF (ukca_config%l_ukca_het_psc)                                          &
-          CALL ukca_hetero(n_points,have_nat,stratflag)
-      CALL asad_ftoy( gfirst, nitfg, num_iter, n_points, ix, jy, nlev )
-      CALL asad_diffun( nl )
-      CALL asad_jac( n_points )
-      CALL asad_impact( n_points, ix, jy, nlev )
+    IF (gphot) CALL ukca_photol(prt, nl)
+    IF (ukca_config%l_ukca_het_psc) CALL ukca_hetero(nl, have_nat, stratflag)
+    CALL asad_ftoy(gfirst, nitfg, num_iter, nl, ix, jy, nlev)
+    CALL asad_diffun(nl)
+    CALL asad_jac(nl)
+    CALL asad_impact(nl, ix, jy, nlev)
+  END DO
+  IF (ukca_config%l_ukca_het_psc) CALL ukca_solidphase(nl)
 
-      !             6.2.  Quasi-steady state scheme.
-      !             ================================
+CASE (3)
 
-    ELSE IF ( method == 2 ) THEN
-      cmessage='QSSA not in UM6.5 build'
-      errcode=1
-      CALL ereport('ASAD_CDRIVE',errcode,cmessage)
+  !     6.3   Sparse Newton-Raphson solver
+  !           ============================
+  !
+  !     NOTE: Looping over ncsteps happens inside the asad_spmjpdriv call.
 
-      !              6.3   Sparse Newton-Raphson solver
-      !              ==================================
+  gfirst = .TRUE.
+  jsubs = 1
 
-    ELSE IF ( method == 3 ) THEN
-      IF ( gphot ) CALL ukca_photol(prt,n_points)
-      IF (ukca_config%l_ukca_het_psc)                                          &
-          CALL ukca_hetero(n_points,have_nat,stratflag)
-      CALL asad_ftoy( gfirst, nitfg, num_iter, n_points, ix, jy, nlev )
+  ! pass num_iter to asad_ftoy
+  num_iter=0
 
-      CALL asad_spmjpdriv(ix,jy,nlev,n_points,num_iter)
+  CALL ukca_photol(prt, nl)
+  IF (ukca_config%l_ukca_het_psc) CALL ukca_hetero(nl, have_nat, stratflag)
+  CALL asad_ftoy(gfirst, nitfg, num_iter, nl, ix, jy, nlev)
+  CALL asad_diffun(nl)
+  CALL asad_spmjpdriv(ix, jy, nlev, nl)
+  IF (ukca_config%l_ukca_het_psc) CALL ukca_solidphase(nl)
 
-      IF (ukca_config%l_ukca_debug_asad) THEN
-        ! Select which print statement to write depending
-        ! on whether asad solver is passed vertical columns
-        ! or horizontal slices
-        IF (ukca_config%l_ukca_asad_columns) THEN
-          WRITE(umMessage,                                                     &
-          "('Iterations in spmjpdriv = ',I0,' ix = ',I0,' jy = ',I0)")         &
-          num_iter, ix, jy
-          CALL umPrint(umMessage,src='asad_cdrive')
-        ELSE
-          WRITE(umMessage,"('Iterations in spmjpdriv = ',I0,' k = ',I0)")      &
-          num_iter, nlev
-          CALL umPrint(umMessage,src='asad_cdrive')
-        END IF
-      END IF
+CASE (5)
 
-      !              6.5   Backward Euler solver
-      !              ===========================
+  !     6.5   Backward Euler solver
+  !           =====================
 
-    ELSE IF ( method == 5 ) THEN
-      IF ( gphot ) CALL ukca_photol(prt,n_points)
-      IF (ukca_config%l_ukca_het_psc)                                          &
-           CALL ukca_hetero(n_points,have_nat,stratflag)
-      CALL asad_ftoy( gfirst, nitfg, num_iter, n_points, ix, jy, nlev )
-      CALL asad_bedriv(ix, jy, n_points, nlev)
+  DO js = 1, ncsteps
+    jsubs = js
+    gfirst = jsubs == 1
+    IF (nfphot /= 0 .AND. .NOT. gfirst) gphot = MOD(jsubs-1,nfphot) == 0
 
-      !           -------------------------------------------------
-      !           STIFF integrators take values in the range 10-19.
-      !           -------------------------------------------------
+    ! pass num_iter to asad_ftoy
+    num_iter=0
 
-      !           6.10  NAG BDF stiff integrator.
+    IF (gphot) CALL ukca_photol(prt, nl)
+    IF (ukca_config%l_ukca_het_psc) CALL ukca_hetero(nl, have_nat, stratflag)
+    CALL asad_ftoy(gfirst, nitfg, num_iter, nl, ix, jy, nlev)
+    CALL asad_bedriv(ix, jy, nl, nlev)
+  END DO
+  IF (ukca_config%l_ukca_het_psc) CALL ukca_solidphase(nl)
 
-    ELSE IF ( method == 10 ) THEN
-      cmessage='NAG BDF not in UM6.5 build'
-      errcode=1
-      CALL ereport('ASAD_CDRIVE',errcode,cmessage)
+CASE DEFAULT
 
-      !             6.11  SVODE ODE stiff integrator from NETLIB.
+  WRITE(cmessage,"('Integration method ',i0,' not supported.')") method
+  errcode=1
+  CALL ereport('ASAD_CDRIVE',errcode,cmessage)
 
-    ELSE IF ( method == 11 ) THEN
-      cmessage='SVODE not in UM6.5 build'
-      errcode=1
-      CALL ereport('ASAD_CDRIVE',errcode,cmessage)
-
-    END IF
-
-    !           6.12  Do any final work for the heterogeneous
-    !                 chemistry before the end of the time loop.
-    !                 =========================================
-
-    IF ( ukca_config%l_ukca_het_psc ) CALL ukca_solidphase(n_points)
-
-  END DO        ! End of looping over chemical timesteps
-
-ELSE           ! Method is equal to zero
-
-  !       6.99  Not integrating: just compute tendencies.
-
-  method = 0
-  IF ( gphot ) CALL ukca_photol(prt,n_points)
-  IF ( ukca_config%l_ukca_het_psc )                                            &
-       CALL ukca_hetero(n_points,have_nat,stratflag)
-  CALL asad_ftoy( first_call, nit0, num_iter, n_points, ix, jy, nlev )
-  CALL asad_diffun( nl )
-  IF ( ukca_config%l_ukca_het_psc ) CALL ukca_solidphase( n_points )
-  IF ( ukca_config%l_ukca_het_psc ) CALL asad_posthet()
-
-END IF        ! End of IF statement for method
+END SELECT ! End of SELECT CASE statement for method
 
 
 !       7.  Determine concentrations and tendencies to be returned to
@@ -389,8 +348,7 @@ DO js = 1, jpspec
     itr  = madvtr(js)
     iodd = nodd(js)
     DO jl = 1, n_points
-      IF ( linfam(jl,itr) ) f(jl,ifam) =                                       &
-                            f(jl,ifam) - iodd*f(jl,itr)
+      IF ( linfam(jl,itr) ) f(jl,ifam) = f(jl,ifam) - iodd*f(jl,itr)
     END DO
   END IF
 END DO
@@ -398,17 +356,9 @@ END DO
 !       7.2  Returned values of concentration and chemical tendency
 
 DO jtr = 1, jpcspf
-  IF ( method /= 0 ) THEN
-    DO jl = 1, n_points
-      cdot(jl,jtr) = ( f(jl,jtr)-ftr(jl,jtr)) / (cdt*ncsteps)
-      ftr(jl,jtr)  = f(jl,jtr)
-    END DO
-  ELSE
-    DO jl = 1, n_points
-      cdot(jl,jtr) = fdot(jl,jtr)
-      ftr(jl,jtr)  = f(jl,jtr)
-    END DO
-  END IF
+  DO jl = 1, n_points
+    ftr(jl,jtr) = f(jl,jtr)
+  END DO
 END DO
 
 
@@ -418,8 +368,7 @@ END DO
 IF ( lvmr ) THEN
   DO jtr = 1, jpcspf
     DO jl = 1, n_points
-      ftr(jl,jtr)  = ftr(jl,jtr)  / tnd(jl)
-      cdot(jl,jtr) = cdot(jl,jtr) / tnd(jl)
+      ftr(jl,jtr)  = ftr(jl,jtr) / tnd(jl)
     END DO
   END DO
 END IF

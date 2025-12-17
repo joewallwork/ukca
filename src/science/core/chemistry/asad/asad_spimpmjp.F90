@@ -256,7 +256,8 @@ SUBROUTINE asad_spimpmjp(exit_code, ix, jy, nlev, n_points, location,          &
 
 USE asad_mod,           ONLY: ptol, peps, cdt, f, fdot, nitnr, nstst, y,       &
                               fj, nonzero_map, ltrig, jpcspf, spfj,            &
-                              modified_map, nonzero_map_unordered
+                              modified_map, nonzero_map_unordered, save_inputs,&
+                              spfj_full, bb_full
 USE asad_sparse_vars,   ONLY: setup_spfuljac, spfuljac, spresolv2, splinslv2
 USE ukca_config_specification_mod, ONLY: ukca_config
 USE yomhook,            ONLY: lhook, dr_hook
@@ -294,6 +295,8 @@ REAL :: ztmp
 ! The maximum concentration allowed was previously f_max = 1.0/f_min
 REAL, PARAMETER :: f_max = 1.0e30
 REAL :: f_min
+! Negative threshold to turn off filtering in quasi-Newton mode
+REAL, PARAMETER :: max_val = -1.0
 REAL :: RelTol_residual_error
 REAL :: RelTol_error
 REAL :: rafmin
@@ -463,6 +466,16 @@ DO iter=1,ukca_config%nrsteps
     END DO
   END IF
 
+  IF (iter == 1) THEN
+    ! Stash the sparse Jacobian and RHS for a single grid-box during the first
+    ! nonlinear solve, if requested
+    IF (save_inputs .AND. ukca_config%l_ukca_asad_columns                      &
+        .AND. ukca_config%ukca_chem_seg_size == 1) THEN
+      spfj_full(ix,jy,nlev,:) = spfj(1,:)
+      bb_full(ix,jy,nlev,:) = G_f(1,:)
+    END IF
+  END IF
+
   CALL splinslv2(n_points,G_f,f_incr,f_min,f_max,nonzero_map_unordered,        &
                     modified_map,spfj)
 
@@ -557,7 +570,8 @@ DO iter=1,ukca_config%nrsteps
                     /DOT_PRODUCT(delta_G(jl,:),delta_G(jl,:))
         G_ftmp(jl,:) = G_f(jl,:)*(1.0 - coeff)
       END DO
-      CALL spresolv2(n_points,G_ftmp,f_incr,f_min,modified_map,spfj)
+
+      CALL spresolv2(n_points,G_ftmp,f_incr,f_min,modified_map,spfj,max_val)
 
       f = f + f_incr
       ! remove negative values. Does not need to be done in

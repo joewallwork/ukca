@@ -64,13 +64,17 @@ SUBROUTINE ukca_chemistry_ctl_col(                                             &
                 zdryrt, zwetrt, nlev_with_ddep                                 &
                 )
 
-USE asad_mod,             ONLY: advt, cdt, ctype,                              &
+USE asad_mod,             ONLY: advt, cdt_diag, ctype,                         &
                                 dpd, dpw, fpsc1, fpsc2,                        &
                                 ihso3_h2o2, ihso3_o3, ih2so4_hv, iso2_oh,      &
                                 iso3_o3, jpctr, jpcspf, jpdd, jpdw, jpnr,      &
                                 jppj, jpro2, jpspec, nadvt, nlnaro2, nprkx,    &
                                 o1d_in_ss, o3p_in_ss, prk, rk,                 &
-                                specf, speci, sph2o, sphno3, spro2, tnd, y, za
+                                specf, speci, sph2o, sphno3, spro2, tnd, y, za,&
+                                save_inputs, ncsteps_full, spfj_full, bb_full, &
+                                write_nc_int32_2d, write_nc_int32_3d,          &
+                                write_nc_real64_2d, write_nc_real64_3d,        &
+                                write_nc_real64_4d
 USE asad_chem_flux_diags, ONLY: l_asad_use_chem_diags,                         &
                                 l_asad_use_drydep,                             &
                                 l_asad_use_flux_rxns,                          &
@@ -194,6 +198,9 @@ INTEGER :: kcs           ! loop variable, start level of current segment/chunk
 INTEGER :: kce           ! loop variable, end level of current segment/chunk
 INTEGER :: chunk_size    ! Number of points within the current segment/chunk
 
+INTEGER :: istratflag(row_length,rows,model_levels)
+INTEGER :: ihave_nat(row_length,rows,model_levels)
+
 INTEGER           :: ierr                     ! Error code: asad diags routines
 INTEGER           :: errcode                  ! Error code: ereport
 CHARACTER(LEN=errormessagelength) :: cmessage         ! Error message
@@ -207,7 +214,6 @@ REAL :: zp  (model_levels)        ! 1-D pressure
 REAL :: zt  (model_levels)        ! 1-D temperature
 REAL :: zclw(model_levels)        ! 1-D cloud liquid water
 REAL :: zfcloud(model_levels)     ! 1-D cloud fraction
-REAL :: cdot(model_levels,jpcspf) ! 1-D chem. tendency
 REAL :: zq(model_levels)          ! 1-D water vapour vmr
 REAL :: co2_1d(model_levels)      ! 1-D CO2 vmr
 REAL :: zprt1d(model_levels,jppj) ! 1-D photolysis rates for ASAD
@@ -280,8 +286,7 @@ END IF
 
 ! Model levels loop
 !$OMP PARALLEL DEFAULT(NONE)                                                   &
-!$OMP PRIVATE(cdot, cmessage, errcode, i, ierr,                                &
-!$OMP         j, js, l, rc_het, stratflag,                                     &
+!$OMP PRIVATE(cmessage, errcode, i, ierr, j, js, l, rc_het, stratflag,         &
 !$OMP         ystore, zclw, zdryrt2, zfcloud, zftr, have_nat1d,                &
 !$OMP         zp, zprt1d, zq, zt, co2_1d, zwetrt2,                             &
 !$OMP         kcs, kce, chunk_size, dpd_full, dpw_full,                        &
@@ -315,6 +320,42 @@ IF (.NOT. ALLOCATED(ystore) .AND. uph2so4inaer == 1)                           &
 ! we need to reallocate inside the parallel region.
 IF (l_autotune_local) THEN
   CALL ukca_reallocate_asad_arrays(ukca_config%ukca_chem_seg_size)
+END IF
+
+! Write inputs to file, if requested
+IF (save_inputs .AND. ukca_config%ukca_chem_seg_size == 1) THEN
+  DO k = 1, model_levels
+    DO j = 1, rows
+      DO i = 1, row_length
+        IF (l_stratosphere(i,j,k)) THEN
+          istratflag(i,j,k) = 1
+        ELSE
+          istratflag(i,j,k) = 0
+        END IF
+        ! IF (have_nat3d(i,j,k)) THEN
+        !   ihave_nat(i,j,k) = 1
+        ! ELSE
+        !   ihave_nat(i,j,k) = 0
+        ! END IF
+      END DO
+    END DO
+  END DO
+  CALL write_nc_int32_3d("stratflag", istratflag)
+  ! CALL write_nc_int32_3d("have_nat", ihave_nat)    ! constant
+  CALL write_nc_int32_2d("nlev_with_ddep", nlev_with_ddep)
+  CALL write_nc_real64_3d("temp", temp)
+  CALL write_nc_real64_3d("pres", pres)
+  CALL write_nc_real64_3d("water_vapour", q/c_h2o)
+  CALL write_nc_real64_3d("cloud_frac", cloud_frac)
+  CALL write_nc_real64_3d("qcl", qcl)
+  CALL write_nc_real64_3d("dryrt", zdryrt)
+  ! CALL write_nc_real64_3d("ph", H_plus_3d_arr)     ! constant
+  ! CALL write_nc_real64_3d("co2", co2_interactive)  ! undefined
+  ! CALL write_nc_real64_3d("so4_sa", so4_sa)        ! FIXME: causes segfault
+  CALL write_nc_real64_3d("cell_volume", volume)
+  CALL write_nc_real64_4d("photol_rates", photol_rates)
+  CALL write_nc_real64_4d("tracer", tracer)
+  CALL write_nc_real64_4d("wetrt", zwetrt)
 END IF
 
 !$OMP DO SCHEDULE(STATIC)
@@ -495,15 +536,14 @@ DO i=1,rows
         END IF
 
         ! Call asad_cdrive with segmented arrays
-        CALL asad_cdrive(cdot(kcs:kce,:),                                      &
-                         zftr(kcs:kce,:),                                      &
+        CALL asad_cdrive(zftr(kcs:kce,:),                                      &
                          zp(kcs:kce),                                          &
                          zt(kcs:kce),                                          &
                          zq(kcs:kce),                                          &
                          co2_1d(kcs:kce),                                      &
                          zfcloud(kcs:kce),                                     &
                          zclw(kcs:kce),                                        &
-                         j,i,klevel,                                           &
+                         j,i,kcs,                                              &
                          zdryrt2(kcs:kce,:),                                   &
                          zwetrt2(kcs:kce,:),                                   &
                          rc_het(kcs:kce,:),                                    &
@@ -538,23 +578,23 @@ DO i=1,rows
           ! Calculate chemical fluxes for MODE
           IF (ihso3_h2o2 > 0) delSO2_wet_H2O2(j,i,kcs:kce) =                   &
             delSO2_wet_H2O2(j,i,kcs:kce) + (rk(:,ihso3_h2o2)*                  &
-            y(:,nn_so2)*y(:,nn_h2o2))*cdt
+            y(:,nn_so2)*y(:,nn_h2o2))*cdt_diag
           IF (ihso3_o3 > 0) delSO2_wet_O3(j,i,kcs:kce) =                       &
             delSO2_wet_O3(j,i,kcs:kce) + (rk(:,ihso3_o3)*                      &
-            y(:,nn_so2)*y(:,nn_o3))*cdt
+            y(:,nn_so2)*y(:,nn_o3))*cdt_diag
           IF (iso3_o3 > 0) delSO2_wet_O3(j,i,kcs:kce) =                        &
             delSO2_wet_O3(j,i,kcs:kce) + (rk(:,iso3_o3)*                       &
-            y(:,nn_so2)*y(:,nn_o3))*cdt
+            y(:,nn_so2)*y(:,nn_o3))*cdt_diag
           ! net H2SO4 production - note that this is affected by
           ! l_fix_ukca_h2so4_ystore above. Y value is concentration
           ! from chemistry prior to zftr being over-written below
           IF (iso2_oh > 0 .AND. ih2so4_hv > 0) THEN
             delh2so4_chem(j,i,kcs:kce) = delh2so4_chem(j,i,kcs:kce) +          &
              ((rk(:,iso2_oh)*y(:,nn_so2)*y(:,nn_oh)) -                         &
-              (rk(:,ih2so4_hv)*y(:,nn_h2so4)))*cdt
+              (rk(:,ih2so4_hv)*y(:,nn_h2so4)))*cdt_diag
           ELSE IF (iso2_oh > 0) THEN
             delh2so4_chem(j,i,kcs:kce) = delh2so4_chem(j,i,kcs:kce) +          &
-              (rk(:,iso2_oh)*y(:,nn_so2)*y(:,nn_oh))*cdt
+              (rk(:,iso2_oh)*y(:,nn_so2)*y(:,nn_oh))*cdt_diag
           END IF
 
           IF (uph2so4inaer == 1) THEN
@@ -563,9 +603,10 @@ DO i=1,rows
             IF (ukca_config%l_fix_ukca_h2so4_ystore) THEN
               ! calculate delh2so4_chem as the difference in H2SO4 over
               ! chemistry
-              ! zftr is already in VMR, so divide by CDT to give as vmr/s
+              ! zftr is already in VMR, so divide by diagnostic chemistry
+              ! timestep to give as vmr/s
               delh2so4_chem(j,i,kcs:kce) = (zftr(kcs:kce,istore_h2so4)         &
-                                             - ystore(kcs:kce)) / cdt
+                                             - ystore(kcs:kce)) / cdt_diag
               ! primary array passed is zftr, so copy back to this, NOT y
               zftr(kcs:kce,istore_h2so4) = ystore(kcs:kce)
             ELSE
@@ -716,6 +757,12 @@ END DO ! loop (j,i)
 !$OMP END DO
 
 IF (ALLOCATED(ystore)) DEALLOCATE(ystore)
+
+IF (save_inputs .AND. ukca_config%ukca_chem_seg_size == 1) THEN
+  CALL write_nc_int32_3d("ncsteps", ncsteps_full)
+  CALL write_nc_real64_4d("sparse_jacobian", spfj_full)
+  CALL write_nc_real64_4d("rhs", bb_full) 
+END IF
 
 !$OMP END PARALLEL
 
