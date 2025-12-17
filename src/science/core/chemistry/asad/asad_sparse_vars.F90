@@ -641,8 +641,6 @@ USE asad_mod, ONLY: jpcspf, spfjsize_max, total, csr_rows, csr_cols, csc_rows, &
                     csc_cols, csr_values, csc_values, modified_map
 USE parkind1, ONLY: jprb, jpim
 USE yomhook, ONLY: lhook, dr_hook
-USE errormessagelength_mod, ONLY: errormessagelength
-USE ereport_mod, ONLY: ereport
 
 IMPLICIT NONE
 !
@@ -698,8 +696,6 @@ REAL :: lower(n_points)
 INTEGER(KIND=jpim), PARAMETER :: zhook_in  = 0
 INTEGER(KIND=jpim), PARAMETER :: zhook_out = 1
 REAL(KIND=jprb)               :: zhook_handle
-
-CHARACTER(LEN=errormessagelength) :: cmessage
 
 CHARACTER(LEN=*), PARAMETER :: RoutineName='SPLINSLV2'
 
