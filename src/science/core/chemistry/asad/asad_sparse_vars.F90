@@ -81,36 +81,43 @@ SUBROUTINE setup_spfuljac()
 !
 ! 1. Create nonzero_map(1:jpcspf,1:jpcspf) and base_tracer(1:spfjsize_max)
 !
-!    nonzero_map(1:jpcspf,1:jpcspf) is an integer indexing array such that
-!    spfj(nonzero_map(i,j)) = A(i,j) where A is dense Jacobian matrix and
-!    spfj is the compressed (sparse) storage of the dense Jacobian matrix.
+!    nonzero_map(1:jpcspf,1:jpcspf) is an integer indexing array such that, for
+!    a given species index jl, spfj(jl,nonzero_map(i,j)) = A(i,j), where A is
+!    the dense Jacobian matrix for species jl and spfj is the compressed
+!    (sparse) storage of the dense Jacobian matrix.
 !
-! 2. Create nonzero_map_unordered(1:jpcspf,1:jpcspf)
+! 2. Create permuted_nonzero_map(1:jpcspf,1:jpcspf)
 !
-!    nonzero_map_unordered(1:jpcspf,1:jpcspf) is an integer indexing array such
-!    that spfj(nonzero_map_unordered(i,j)) = (PAP')(i,j) where (PAP')(i,j) is
+!    permuted_nonzero_map(1:jpcspf,1:jpcspf) is an integer indexing array such
+!    that spfj(jl,permuted_nonzero_map(i,j)) = (PAP')(i,j) where (PAP')(i,j) is
 !    the (i,j) entry of the matrix matmul(P,matmul(A,transpose(P))) where P is
 !    the permutation matrix and A is the dense Jacobian.
 !
 ! 3. Check number of nonzero entries in LU factorization of the dense Jacobian
 !
-!    Gaussian-elimination is used to solve a linear equation in splinslv2 and
+!    Gaussian elimination is used to solve a linear equation in splinslv2 and
 !    the array spfj is used to hold the LU factorization. This section checks
-!    that when this LU factorization is done the spfj array is sufficiently
-!    large enough to hold the nonzero entries of the LU factorization.
+!    that when this LU factorization is done the spfj array is large enough to
+!    hold the nonzero entries of the LU factorization.
 !
-! 4. Calculate product and loss indexing arrays for Jacobian
+! 4. Determine compressed formats for Jacobian
+!
+!    Determine the compressed-sparse-row (CSR) and compressed-sparse-column
+!    (CSC) formats for the Jacobian to enable sparse matrix operations.
+!
+! 5. Calculate product and loss indexing arrays for Jacobian
 !
 !    posterms, negterms and fracterms are used in calculating the values for
 !    the Jacobian matrix.
 
 USE asad_mod, ONLY: specf, frpx, jpcspf, jpfrpx, jpmsp, jpspec,                &
                     madvtr, modified_map, ndepd, ndepw, nfrpx, njcoth, nltrf,  &
-                    nmsjac, nmzjac, nonzero_map, nonzero_map_unordered,        &
+                    nmsjac, nmzjac, nonzero_map,                               &
                     npdfr, nsjac1, nstst, ntabpd, ntrf, ntro3, nzjac1,         &
                     reorder, spfjsize_max, maxterms, maxfterms,                &
                     nposterms, nnegterms, nfracterms, posterms, negterms,      &
-                    fracterms, base_tracer, ffrac, ztabpd, total
+                    fracterms, base_tracer, ffrac, ztabpd, total, csr_rows,    &
+                    csr_cols, csc_rows, csc_cols, csr_values, csc_values
 USE parkind1, ONLY: jprb, jpim
 USE yomhook, ONLY: lhook, dr_hook
 USE ereport_mod, ONLY: ereport
@@ -143,8 +150,12 @@ INTEGER :: kr
 INTEGER :: ikr
 INTEGER :: krj
 INTEGER :: ij
+INTEGER :: ji
+INTEGER :: nnzl
+INTEGER :: nnzu
 INTEGER :: itemp1
 INTEGER :: activity(jpcspf)
+INTEGER :: permuted_nonzero_map(jpcspf, jpcspf)
 
 INTEGER, ALLOCATABLE :: permute(:,:)  ! permutation matrix
 INTEGER, ALLOCATABLE :: map(:,:)      ! a matrix of 1's indicating where the
@@ -249,7 +260,7 @@ DO i = 1, jpcspf
 END DO
 
 ! ------------------------------------------------------------------------------
-! Section 2: Create nonzero_map_unordered (index array for PAP')
+! Section 2: Create permuted_nonzero_map (index array for PAP')
 ! ------------------------------------------------------------------------------
 
 ! Reorder species by their reactivity to minimize fill-in
@@ -257,11 +268,9 @@ DO i = 1, jpcspf
   activity(i) = SUM(map(:,i)) + SUM(map(i,:))
   reorder(i) = i
 END DO
-
 DO i = 1, jpcspf-1
   DO j = i+1, jpcspf
     IF (activity(i) > activity(j)) THEN
-      ! exchange i and j tracers if i is more active than j.
       itemp1 = reorder(i)
       reorder(i) = reorder(j)
       reorder(j) = itemp1
@@ -280,19 +289,18 @@ DO i = 1, jpcspf
   END IF
 END DO
 
-! reorganize pointer variable to account for varying fill-in
+! Compute permutation matrix P
 IF (.NOT. ALLOCATED(permute)) ALLOCATE(permute(jpcspf,jpcspf))
-
 permute(:,:) = 0
 DO i = 1, jpcspf
   permute(i,reorder(i)) = 1
 END DO
 
-! Calculate the index array nonzero_map_unordered such that
-! spfj(nonzero_map_unordered(i,j)) = P*A*P'(i,j)
+! Calculate the index array permuted_nonzero_map such that
+! spfj(permuted_nonzero_map(i,j)) = P*A*P'(i,j)
 ! where P is the permutation matrix and A is the dense Jacobian matrix
 ! with spfj the compressed storage (sparse) array for matrix A.
-nonzero_map_unordered = MATMUL(MATMUL(permute, nonzero_map), TRANSPOSE(permute))
+permuted_nonzero_map = MATMUL(MATMUL(permute, nonzero_map), TRANSPOSE(permute))
 
 IF (ALLOCATED(permute)) DEALLOCATE(permute)
 IF (ALLOCATED(map))     DEALLOCATE(map)
@@ -304,7 +312,7 @@ IF (ALLOCATED(map))     DEALLOCATE(map)
 ! Calculate the number of nonzero matrix elements in the LU factorization of the
 ! array PAP' and check that it is less than spfjsize_max.
 total1 = total
-modified_map(:,:) = nonzero_map_unordered(:,:)
+modified_map(:,:) = permuted_nonzero_map(:,:)
 DO kr = 1, jpcspf
   DO i = kr+1, jpcspf
     ikr = modified_map(i,kr)
@@ -344,7 +352,41 @@ IF (mype == 0 .AND. printstatus >= prstatus_normal) THEN
 END IF
 
 ! ------------------------------------------------------------------------------
-! Section 4: Calculate production and loss terms
+! Section 4: Determine compressed formats for Jacobian
+! ------------------------------------------------------------------------------
+
+! Deduce row-wise and column-wise sparse representations of the lower and upper
+! triangular parts of modified_map
+nnzl = 0
+nnzu = 0
+DO i = 1, jpcspf
+  DO j = i, jpcspf
+    ij = modified_map(i,j)
+    IF (ij > 0) THEN
+      ! Get the column index and value of any nonzero in row i
+      nnzl = nnzl + 1
+      csr_values(nnzl) = ij
+      csr_cols(nnzl) = j
+    END IF
+    ji = modified_map(j,i)
+    IF (ji > 0) THEN
+      ! Get the row index and value of any nonzero in column i
+      nnzu = nnzu + 1
+      csc_values(nnzu) = ji
+      csc_rows(nnzu) = j
+    END IF
+    ! The first nonzero in a row/column is always the diagonal entry
+    IF (i == j) THEN
+      csr_rows(i) = nnzl
+      csc_cols(i) = nnzu
+    END IF
+  END DO
+END DO
+csr_rows(jpcspf+1) = nnzl
+csc_cols(jpcspf+1) = nnzu
+
+! ------------------------------------------------------------------------------
+! Section 5: Calculate production and loss terms
 ! ------------------------------------------------------------------------------
 
 nposterms(:)   = 0
@@ -593,12 +635,14 @@ END SUBROUTINE spfuljac
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-SUBROUTINE splinslv2(n_points, bb, xx, min_pivot, max_val,                     &
-                     nonzero_map_unordered, modified_map, spfj)
+SUBROUTINE splinslv2(n_points, bb, xx, min_pivot, max_val, spfj)
 
-USE asad_mod, ONLY: jpcspf, spfjsize_max, total
+USE asad_mod, ONLY: jpcspf, spfjsize_max, total, csr_rows, csr_cols, csc_rows, &
+                    csc_cols, csr_values, csc_values, modified_map
 USE parkind1, ONLY: jprb, jpim
 USE yomhook, ONLY: lhook, dr_hook
+USE errormessagelength_mod, ONLY: errormessagelength
+USE ereport_mod, ONLY: ereport
 
 IMPLICIT NONE
 !
@@ -629,12 +673,9 @@ REAL, INTENT(IN OUT)    :: bb(n_points,jpcspf)
 REAL, INTENT(OUT)       :: xx(n_points,jpcspf)
 REAL, INTENT(IN)        :: min_pivot
 REAL, INTENT(IN)        :: max_val
-INTEGER, INTENT(IN)     :: nonzero_map_unordered(jpcspf,jpcspf)
-INTEGER, INTENT(IN OUT) :: modified_map(jpcspf,jpcspf)
 REAL, INTENT(IN OUT)    :: spfj(1:n_points,1:spfjsize_max)
 
 ! Local variables
-INTEGER :: total1    ! total number of nonzero entries in Jacobian
 INTEGER :: kr
 INTEGER :: jl
 INTEGER :: i
@@ -642,20 +683,30 @@ INTEGER :: j
 INTEGER :: ikr
 INTEGER :: krj
 INTEGER :: ij
+INTEGER :: inz
+INTEGER :: jnz
+INTEGER :: errcode
+INTEGER :: istart
+INTEGER :: iend
+INTEGER :: jstart
+INTEGER :: jend
 
-REAL :: bb1(n_points,jpcspf)
-REAL :: xx1(n_points,jpcspf)
-
+REAL :: multiplier(n_points)
 REAL :: pivot(n_points)
-REAL :: kfact(n_points)
+REAL :: lower(n_points)
 
 INTEGER(KIND=jpim), PARAMETER :: zhook_in  = 0
 INTEGER(KIND=jpim), PARAMETER :: zhook_out = 1
 REAL(KIND=jprb)               :: zhook_handle
 
+CHARACTER(LEN=errormessagelength) :: cmessage
+
 CHARACTER(LEN=*), PARAMETER :: RoutineName='SPLINSLV2'
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
+
+! NOTE: splinslv2 is always preceded by spfuljac, which computes spfj to be a sparse (compressed)
+!       representation of the Jacobian matrix for each species.
 
 ! Filter sparse Jacobian
 #if defined(IBM_XL_FORTRAN)
@@ -674,54 +725,66 @@ DO j = 1, total
 END DO
 #endif
 
-
 ! Section 1: Determine L U factors such that L U = P A P'
-! The L U factors are overwritten onto the original sparse Jacobian array
-total1 = total
-modified_map(:,:) = nonzero_map_unordered(:,:)
+!
+! The L U factors are overwritten onto the original sparse Jacobian array. That is, for each species
+! index jl, the upper triangular part of the matrix represented by spfj(jl,:) holds the U factor and
+! the strictly lower triangular part holds the L factor below its unit diagonal.
+
+! Loop over rows for pivoting
+errcode = 0
 DO kr = 1, jpcspf
-  pivot(:) = spfj(:,modified_map(kr,kr))
-  WHERE (ABS(pivot) > min_pivot)
-    pivot(:) = 1.0 / pivot
+
+  ! Get the range of lower-diagonal non-zero entries in column kr
+  istart = csc_cols(kr)
+  iend = csc_cols(kr+1)
+
+  ! The multipliers are the diagonal entries for each species
+  multiplier(:) = spfj(:,csc_values(istart))
+
+  ! Determine the pivot for each species using a threshold
+  WHERE (ABS(multiplier) > min_pivot)
+    pivot(:) = 1.0 / multiplier
   ELSE WHERE
     pivot(:) = max_val
   END WHERE
-  !        PIVOT = 1./spfj(:,modified_map(kr,kr))
-  DO i = kr+1, jpcspf
-    ikr = modified_map(i,kr)
-    IF (ikr > 0) THEN
-      kfact = spfj(:,ikr)*pivot
-      spfj(:,ikr) = kfact
-      DO j = kr+1, jpcspf
-        krj = modified_map(kr,j)
-        IF (krj > 0) THEN
-          ij = modified_map(i,j)
-          ! Distinguish whether matrix element is zero or not. If not, proceed
-          ! as in dense case. If it is, create new matrix element.
-          IF (ij > 0) THEN
-            spfj(:,ij) = spfj(:,ij) - kfact*spfj(:,krj)
-          ELSE
-            total1 = total1 + 1
-            modified_map(i,j) = total1
-            spfj(:,total1) = -kfact*spfj(:,krj)
-          END IF
-        END IF
-      END DO
-    END IF
+
+  ! Loop over non-zero entries in column kr below the diagonal
+  DO inz = istart+1, iend-1
+    i = csc_rows(inz)
+    ikr = csc_values(inz)
+
+    ! Compute contribution to the lower diagonal part and store it in spfj
+    lower(:) = spfj(:,ikr)*pivot
+    spfj(:,ikr) = lower
+
+    ! Get the range of upper-diagonal non-zero entries in row kr
+    jstart = csr_rows(kr)
+    jend = csr_rows(kr+1)
+
+    ! Loop over columns above the diagonal
+    DO jnz = jstart+1, jend-1
+      j = csr_cols(jnz)
+      krj = csr_values(jnz)
+      ij = modified_map(i,j)
+      ! The matrix entry is non-zero, so compute the contribution towards the
+      ! upper triangular part and store it above the diagonal in spfj
+      spfj(:,ij) = spfj(:,ij) - lower*spfj(:,krj)
+    END DO
   END DO
 END DO
 
 ! Filter sparse Jacobian
 #if defined(IBM_XL_FORTRAN)
 ! Version optimised for IBM by using the fsel IBM-only intrinsic
-DO j = 1, total1
+DO j = 1, total
   DO jl = 1, n_points
     tmp = fsel(spfj(jl,j)+max_val, spfj(jl,j), -max_val)
     spfj(jl,j) = fsel(tmp-max_val, max_val, tmp)
   END DO
 END DO
 #else
-DO j = 1, total1
+DO j = 1, total
   DO jl = 1, n_points
     spfj(jl,j) = MIN(MAX(spfj(jl,j), -max_val), max_val)
   END DO
@@ -730,7 +793,7 @@ END DO
 
 
 ! Section 2: Solve P A P' z = P b with P'z = x using L U z = P b
-CALL spresolv2(n_points, bb, xx, min_pivot, modified_map, spfj, max_val)
+CALL spresolv2(n_points, bb, xx, min_pivot, spfj, max_val)
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
 RETURN
@@ -738,7 +801,7 @@ END SUBROUTINE splinslv2
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-SUBROUTINE spresolv2(n_points, bb, xx, min_pivot, modified_map, spfj, max_val)
+SUBROUTINE spresolv2(n_points, bb, xx, min_pivot, spfj, max_val)
 
 ! This subroutine determines x where L U z = P b with P' z = x
 ! The L U factors are supplied to this routine and contained with spfj array.
@@ -749,7 +812,8 @@ SUBROUTINE spresolv2(n_points, bb, xx, min_pivot, modified_map, spfj, max_val)
 ! Part (c) back-substitution: find z where U z = w
 ! Part (d) determine x, apply transpose(P) to z, P'z = x
 
-USE asad_mod, ONLY: jpcspf, reorder, spfjsize_max
+USE asad_mod, ONLY: jpcspf, reorder, spfjsize_max, csr_rows, csr_cols,         &
+                    csr_values, csc_cols, csc_rows, csc_values
 USE parkind1, ONLY: jprb, jpim
 USE yomhook, ONLY: lhook, dr_hook
 
@@ -760,7 +824,6 @@ INTEGER, INTENT(IN)  :: n_points
 REAL,    INTENT(IN)  :: bb(n_points,jpcspf)
 REAL,    INTENT(OUT) :: xx(n_points,jpcspf)
 REAL,    INTENT(IN)  :: min_pivot
-INTEGER, INTENT(IN)  :: modified_map(jpcspf,jpcspf)
 REAL,    INTENT(IN)  :: spfj(n_points,spfjsize_max)
 
 ! Maximum tolerated value for use in filtering step. Unused if negative
@@ -769,7 +832,13 @@ REAL,    INTENT(IN)  :: max_val
 
 INTEGER :: kr
 INTEGER :: i
+INTEGER :: istart
+INTEGER :: iend
+INTEGER :: inz
 INTEGER :: j
+INTEGER :: jstart
+INTEGER :: jend
+INTEGER :: jnz
 INTEGER :: krj
 INTEGER :: ikr
 
@@ -792,21 +861,33 @@ END DO
 
 ! Part (b) forward-substitution: find w where L w = P b
 DO kr = 1, jpcspf-1
-  DO i = kr+1, jpcspf
-    ikr = modified_map(i,kr)
-    IF (ikr > 0) bb1(:,i) = bb1(:,i) - spfj(:,ikr)*bb1(:,kr)
+  ! Get the range of lower-diagonal non-zero entries in column kr
+  istart = csc_cols(kr)
+  iend = csc_cols(kr+1)
+  ! Apply forward-substitution
+  DO inz = istart+1, iend-1
+    i = csc_rows(inz)
+    ikr = csc_values(inz)
+    bb1(:,i) = bb1(:,i) - spfj(:,ikr)*bb1(:,kr)
   END DO
 END DO
 
 ! Part (c) back-substitution: find z where U z = w
 DO kr = jpcspf, 1, -1
   xx1(:,kr) = bb1(:,kr)
-  DO j = kr+1, jpcspf
-    krj = modified_map(kr,j)
-    IF (krj > 0) xx1(:,kr) = xx1(:,kr) - spfj(:,krj)*xx1(:,j)
+  ! Get the range of upper-diagonal non-zero entries in row kr
+  jstart = csr_rows(kr)
+  jend = csr_rows(kr+1)
+  ! Apply back-substitution
+  DO jnz = jstart+1, jend-1
+    j = csr_cols(jnz)
+    krj = csr_values(jnz)
+    xx1(:,kr) = xx1(:,kr) - spfj(:,krj)*xx1(:,j)
   END DO
-  pivot(:) = spfj(:,modified_map(kr,kr))
+  ! Determine the pivot for each species using a threshold
+  pivot(:) = spfj(:,csr_values(jstart))
   WHERE (ABS(pivot) < min_pivot) pivot = min_pivot
+  ! Divide the solution by the pivot
   IF (max_val > 0) THEN
     xx1(:,kr) = MIN(MAX(xx1(:,kr), -max_val), max_val) / pivot
   ELSE

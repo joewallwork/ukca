@@ -166,12 +166,19 @@ REAL, ALLOCATABLE :: frpj(:)         ! fractional product array (phot)
 REAL, ALLOCATABLE :: frph(:)         ! fractional product array (het)
 REAL, ALLOCATABLE :: frpx(:)         ! fractional product array (total)
 ! sparse algebra
-INTEGER, ALLOCATABLE :: nonzero_map_unordered(:,:)  ! Map of nonzero entries
 INTEGER, ALLOCATABLE :: modified_map(:,:) ! modified map (after decomposition)
 INTEGER, ALLOCATABLE :: nonzero_map(:,:)
                                     ! Map of nonzero entries, before reordering
 
 INTEGER, ALLOCATABLE :: reorder(:)   ! reordering of tracers to minimize fill-in
+! upper triangular part in compressed-sparse-row (CSR) format
+INTEGER, ALLOCATABLE :: csr_rows(:)    ! first nonzero in each row
+INTEGER, ALLOCATABLE :: csr_cols(:)    ! column index for each nonzero
+INTEGER, ALLOCATABLE :: csr_values(:)  ! value of each nonzero
+! lower triangular part in compressed-sparse-column (CSC) format
+INTEGER, ALLOCATABLE :: csc_cols(:)    ! first nonzero in each column
+INTEGER, ALLOCATABLE :: csc_rows(:)    ! row index of each nonzero
+INTEGER, ALLOCATABLE :: csc_values(:)  ! value of each nonzero
 
 INTEGER, ALLOCATABLE :: ilcf(:)
 INTEGER, ALLOCATABLE :: ilss(:)
@@ -357,10 +364,10 @@ CHARACTER(LEN=*), PARAMETER, PRIVATE :: ModuleName='ASAD_MOD'
 !$OMP THREADPRIVATE(cdt, co3, deriv, dpd, dpw, ej, emr,                        &
 !$OMP               f, fdot, fj, fpsc1, fpsc2, ftilde,                         &
 !$OMP               interval, ipa, jsubs,                                      &
-!$OMP               lati, linfam, ltrig, modified_map,                         &
-!$OMP               ncsteps, p, pd, pmintnd, prk, prod,                        &
-!$OMP               qa, ratio, rk,                                             &
-!$OMP               sh2o, shno3, slos, spfj, sph2o, sphno3,                    &
+!$OMP               lati, linfam, ltrig, modified_map, csr_values, csc_values, &
+!$OMP               csr_rows, csr_cols, csc_rows, csc_cols,                    &
+!$OMP               ncsteps, p, pd, pmintnd, prk, prod, qa, ratio,             &
+!$OMP               rk, sh2o, shno3, slos, spfj, sph2o, sphno3,                &
 !$OMP               t, t300, tnd, wp, co2, y, ydot, za)
 
 CONTAINS
@@ -542,11 +549,11 @@ nitfg   = 10            ! Max number of iterations in ftoy
 njcoth(:,:) = 0
 
 IF (method == int_method_NR) THEN
-  IF (.NOT. ALLOCATED(nonzero_map_unordered))                                  &
-      ALLOCATE(nonzero_map_unordered(jpcspf, jpcspf))
   IF (.NOT. ALLOCATED(modified_map))  ALLOCATE(modified_map(jpcspf, jpcspf))
-  IF (.NOT. ALLOCATED(nonzero_map))  ALLOCATE(nonzero_map(jpcspf, jpcspf))
-  IF (.NOT. ALLOCATED(reorder))  ALLOCATE(reorder(jpcspf))
+  IF (.NOT. ALLOCATED(nonzero_map))   ALLOCATE(nonzero_map(jpcspf, jpcspf))
+  IF (.NOT. ALLOCATED(reorder))       ALLOCATE(reorder(jpcspf))
+  IF (.NOT. ALLOCATED(csr_rows))      ALLOCATE(csr_rows(jpcspf+1))
+  IF (.NOT. ALLOCATED(csc_cols))      ALLOCATE(csc_cols(jpcspf+1))
 
   ! allocate arrays required by solver. These should only be done once, and not
   ! deallocated (hence no matching deallocate statements).
@@ -562,6 +569,11 @@ IF (method == int_method_NR) THEN
     maxterms     = 160
     maxfterms    = 100
   END IF
+
+  IF (.NOT. ALLOCATED(csr_cols))    ALLOCATE(csr_cols(spfjsize_max))
+  IF (.NOT. ALLOCATED(csc_rows))    ALLOCATE(csc_rows(spfjsize_max))
+  IF (.NOT. ALLOCATED(csr_values))  ALLOCATE(csr_values(spfjsize_max))
+  IF (.NOT. ALLOCATED(csc_values))  ALLOCATE(csc_values(spfjsize_max))
 
   ! Allocate production and loss Jacobian arrays for NR solver
   IF (.NOT. ALLOCATED(nposterms))   ALLOCATE(nposterms(spfjsize_max))
