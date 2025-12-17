@@ -106,7 +106,7 @@ CONTAINS
 SUBROUTINE asad_spmjpdriv(ix,jy,nlev,n_points,num_iter)
 
 USE asad_mod, ONLY: cdt, f, jpcspf, jpspec, ltrig,                             &
-                    ncsteps, nitfg, speci, y
+                    ncsteps, ncsteps_full, nitfg, speci, y, chunk_start
 USE ukca_config_specification_mod, ONLY: ukca_config
 USE parkind1, ONLY: jprb, jpim
 USE yomhook, ONLY: lhook, dr_hook
@@ -155,10 +155,24 @@ REAL(KIND=jprb)               :: zhook_handle
 
 CHARACTER(LEN=*), PARAMETER :: RoutineName='ASAD_SPMJPDRIV'
 
+INTEGER, SAVE :: kcs = 0
+LOGICAL :: training = .true.
+
 !
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
-ncst = ncsteps
+
+kcs = chunk_start
+! TODO: Use kce = chunk_end for chunking
+
+kcs = kcs + 1
 ctrd = cdt
+ncst = ncsteps
+IF (training) THEN
+  ncsteps_full(kcs) = ncsteps
+ELSE
+  ncsteps = ncsteps_full(kcs)
+  cdt = cdt / 2 ** ncsteps
+END IF
 ltrig=.FALSE.
 !
 CALL asad_diffun( n_points )
@@ -231,6 +245,9 @@ DO WHILE (iter <= iredo)
               location,mype
           CALL umPrint(umMessage,src='asad_spmjpdriv')
         END IF
+        IF (training) THEN
+          ncsteps_full(kcs) = ncsteps
+        END IF
         ncsteps = ncst
         cdt = ctrd
         GO TO 9999
@@ -246,6 +263,10 @@ DO WHILE (iter <= iredo)
   END IF
 END DO
 
+! Extract number of halving steps from solver
+IF (training) THEN
+  ncsteps_full(kcs) = ncsteps
+END IF
 IF (iredo > 1) THEN
   IF (iredo > 2) THEN
     WRITE(umMessage,"('   No. iterations =',i2)") iredo

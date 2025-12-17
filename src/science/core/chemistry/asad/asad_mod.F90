@@ -315,6 +315,9 @@ INTEGER :: nro2           ! Counter for Non-transported RO2 species
 INTEGER :: nuni
 INTEGER :: nsst           ! No of steady-state species
 INTEGER :: ncsteps        ! No of chemical steps
+INTEGER, ALLOCATABLE :: ncsteps_full(:) ! No of chemical steps stashed for output from the solver
+INTEGER :: chunk_start
+INTEGER :: chunk_end
 INTEGER :: nit0=20        ! ftoy iterations with method=0
 INTEGER :: nfphot
 INTEGER :: jsubs

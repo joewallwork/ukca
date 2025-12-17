@@ -29,6 +29,8 @@
 !
 MODULE ukca_chemistry_ctl_col_mod
 
+USE FTorch
+
 IMPLICIT NONE
 
 CHARACTER(LEN=*), PARAMETER, PRIVATE :: ModuleName=                            &
@@ -69,6 +71,7 @@ USE asad_mod,             ONLY: advt, cdt, ctype,                              &
                                 ihso3_h2o2, ihso3_o3, ih2so4_hv, iso2_oh,      &
                                 iso3_o3, jpctr, jpcspf, jpdd, jpdw, jpnr,      &
                                 jppj, jpro2, jpspec, nadvt, nlnaro2, nprkx,    &
+                                ncsteps_full, chunk_start, chunk_end,          &
                                 o1d_in_ss, o3p_in_ss, prk, rk,                 &
                                 specf, speci, sph2o, sphno3, spro2, tnd, y, za
 USE asad_chem_flux_diags, ONLY: l_asad_use_chem_diags,                         &
@@ -102,6 +105,10 @@ USE ukca_missing_data_mod, ONLY: rmdi
 USE errormessagelength_mod, ONLY: errormessagelength
 
 USE asad_cdrive_mod, ONLY: asad_cdrive
+
+USE ftorch, ONLY: torch_kCPU, torch_model, torch_model_load, torch_tensor,     &
+                  torch_model_forward, torch_tensor_from_array, torch_delete
+USE, intrinsic :: iso_fortran_env, ONLY: sp => real32
 
 !!!! Note: LFRIC-specific pre-processor directives used in this module are
 !!!! inappropriate in UKCA and should be removed but must be retained while
@@ -241,7 +248,39 @@ CHARACTER(LEN=*), PARAMETER :: RoutineName='UKCA_CHEMISTRY_CTL_COL'
 TYPE(autotune_type), ALLOCATABLE, SAVE :: autotune_state
 #endif
 
+LOGICAL :: training = .TRUE.
+INTEGER :: num_halving_steps
+INTEGER, SAVE :: iteration = 0
+INTEGER :: tot_n_points
+INTEGER, ALLOCATABLE :: istratflag_full(:)
+REAL(sp), ALLOCATABLE :: zt_full(:)
+REAL(sp), ALLOCATABLE :: zq_full(:)
+REAL(sp), ALLOCATABLE :: zp_full(:)
+REAL(sp), ALLOCATABLE :: cldf_full(:)
+REAL(sp), ALLOCATABLE :: cldl_full(:)
+REAL(sp), ALLOCATABLE :: prt_full(:,:)
+REAL(sp), ALLOCATABLE :: dryrt_full(:,:)
+REAL(sp), ALLOCATABLE :: wetrt_full(:,:)
+REAL(sp), ALLOCATABLE :: ftr_full(:,:)
+
+! TODO: Use different arrays for each input
+REAL(sp), ALLOCATABLE :: in_data(:)
+REAL(sp), TARGET :: out_data(1)
+TYPE(torch_tensor) :: in_tensors(1)
+TYPE(torch_tensor) :: out_tensors(1)
+TYPE(torch_model) :: mlp
+INTEGER :: idx1, idx2
+
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
+
+IF (ukca_config%ukca_chem_seg_size /= 1) THEN
+  ! TODO: Support larger values through batching
+  errcode = 99
+  WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+  CALL umPrint(umMessage,src=RoutineName)
+  cmessage='ERROR: Training requires ukca_chem_seg_size=1'
+  CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+END IF
 
 #if !defined(LFRIC)
 ! Set up automatic segment size tuning
@@ -315,6 +354,127 @@ IF (.NOT. ALLOCATED(ystore) .AND. uph2so4inaer == 1)                           &
 ! we need to reallocate inside the parallel region.
 IF (l_autotune_local) THEN
   CALL ukca_reallocate_asad_arrays(ukca_config%ukca_chem_seg_size)
+END IF
+
+! Open training data files for writing
+iteration = iteration + 1
+IF (training) THEN
+  tot_n_points = theta_field_size * model_levels
+
+  ALLOCATE(istratflag_full(tot_n_points))
+  istratflag_full(:) = 0
+  kcs = 1
+  DO i=1,rows
+    DO j=1,row_length
+      DO k=1,model_levels
+        IF (L_stratosphere(j,i,k)) THEN
+          istratflag_full(kcs) = 1
+          kcs = kcs + 1
+        END IF
+      END DO
+    END DO
+  END DO
+  CALL write_nc_integer_1d(iteration, "stratflag", istratflag_full)
+  DEALLOCATE(istratflag_full)
+
+  ALLOCATE(zt_full(tot_n_points))
+  zt_full(:) = PACK(temp,.TRUE.)
+  CALL write_nc_real_1d(iteration, "zt", zt_full)
+  DEALLOCATE(zt_full)
+
+  ALLOCATE(zp_full(tot_n_points))
+  zp_full(:) = PACK(pres,.TRUE.)
+  CALL write_nc_real_1d(iteration, "zp", zp_full)
+  DEALLOCATE(zp_full)
+
+  ALLOCATE(zq_full(tot_n_points))
+  zq_full(:) = PACK(q,.TRUE.)/c_h2o
+  CALL write_nc_real_1d(iteration, "zq", zq_full)
+  DEALLOCATE(zq_full)
+
+  ALLOCATE(cldf_full(tot_n_points))
+  cldf_full(:) = PACK(qcl,.TRUE.)
+  CALL write_nc_real_1d(iteration, "cldf", cldf_full)
+  DEALLOCATE(cldf_full)
+
+  ALLOCATE(cldl_full(tot_n_points))
+  cldl_full(:) = PACK(cloud_frac,.TRUE.)
+  CALL write_nc_real_1d(iteration, "cldl", cldl_full)
+  DEALLOCATE(cldl_full)
+
+  ALLOCATE(prt_full(tot_n_points,jppj))
+  IF (ukca_config%l_ukca_offline) THEN
+    prt_full(:,:) = 0.0
+  ELSE
+    prt_full(:,:) = RESHAPE(photol_rates,[tot_n_points,jppj])
+  END IF
+  CALL write_nc_real_2d(iteration, "prt", prt_full)
+  DEALLOCATE(prt_full)
+
+  ALLOCATE(dryrt_full(tot_n_points,jpdd))
+  dryrt_full(:,:) = 0.0
+  kcs = 1
+  DO i=1,rows
+    DO j=1,row_length
+      IF (ukca_config%l_ukca_intdd) THEN
+        DO k=1,model_levels
+          IF (k <= nlev_with_ddep(j,i)) THEN
+            dryrt_full(kcs,:) = zdryrt(j,i,:)
+          END IF
+          kcs = kcs + 1
+        END DO
+      ELSE
+        zdryrt2(1,:) = zdryrt(j,i,:)
+        kcs = kcs + model_levels
+      END IF
+    END DO
+  END DO
+  CALL write_nc_real_2d(iteration, "dryrt", dryrt_full)
+  DEALLOCATE(dryrt_full)
+
+  ALLOCATE(wetrt_full(tot_n_points,jpdw))
+  wetrt_full(:,:) = RESHAPE(zwetrt,[tot_n_points,jpdw])
+  CALL write_nc_real_2d(iteration, "wetrt", wetrt_full)
+  DEALLOCATE(wetrt_full)
+
+  ALLOCATE(ftr_full(tot_n_points,jpspec))
+  jspf = 0
+  DO js = 1,jpspec
+    DO jtr=1,jpctr
+      IF (advt(jtr) == speci(js)) THEN
+        jspf = jspf+1
+        ftr_full(:,jspf) = PACK(tracer(:,:,:,jtr),.TRUE.)/c_species(jtr)
+      END IF
+    END DO
+    IF (ukca_config%l_ukca_ro2_ntp) THEN
+      DO jro2 = 1, jpro2
+        IF (spro2(jro2) == speci(js) .AND. ctype(js) == 'OO') THEN
+          l = name2ntpindex(spro2(jro2))
+          jna = nlnaro2(jro2)
+          IF (nadvt(jna) == spro2(jro2)) THEN
+            jspf = jspf+1
+            ftr_full(:,jspf) = PACK(all_ntp(l)%data_3d,.TRUE.) / c_na_species(jna)
+          ELSE
+            errcode = jro2
+            WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+            CALL umPrint(umMessage,src=RoutineName)
+            cmessage='ERROR: Indices for RO2 species do not match w/ nadvt'
+            CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+          END IF
+        END IF
+      END DO
+    END IF
+  END DO
+  CALL write_nc_real_2d(iteration, "ftr", ftr_full)
+  DEALLOCATE(ftr_full)
+
+  ALLOCATE(ncsteps_full(tot_n_points))
+  ncsteps_full(:) = 1
+ELSE
+  ALLOCATE(in_data(6+jppj+jpdd+jpdw+jpspec))
+  CALL torch_tensor_from_array(in_tensors(1), in_data, torch_kCPU)
+  CALL torch_tensor_from_array(out_tensors(1), out_data, torch_kCPU)
+  CALL torch_model_load(mlp, "model.pt", torch_kCPU)
 END IF
 
 !$OMP DO SCHEDULE(STATIC)
@@ -433,7 +593,7 @@ DO i=1,rows
       zprt1d(:,:) = photol_rates(j,i,:,:)
     END IF
 
-    !       Call ASAD routines to do chemistry integration
+    !       CALL ASAD routines to do chemistry integration
 
     IF (.NOT. (ukca_config%l_ukca_trop .OR. ukca_config%l_ukca_aerchem .OR.    &
                ukca_config%l_ukca_raq .OR. ukca_config%l_ukca_raqaero)) THEN
@@ -464,6 +624,8 @@ DO i=1,rows
       DO kcs = 1, model_levels, ukca_config%ukca_chem_seg_size
 
         kce = MIN(kcs+(ukca_config%ukca_chem_seg_size-1),model_levels)
+        chunk_start = kcs
+        chunk_end = kce
 
         ! Get current chunk_size (not necessarily equal to ukca_chem_seg_size)
         chunk_size  = (kce+1)-kcs
@@ -494,24 +656,53 @@ DO i=1,rows
           sph2o(1:chunk_size) = qcf(j,i,kcs:kce)/c_h2o
         END IF
 
+        IF (.NOT. training) THEN
+          ! Call data-driven version
+          ! TODO: Avoid the following by passing input arrays separately
+          IF (stratflag(kcs)) THEN
+            in_data(1) = 1.0
+          ELSE
+            in_data(1) = 0.0
+          END IF
+          in_data(2) = zt(kcs)
+          in_data(3) = zp(kcs)
+          in_data(4) = zq(kcs)
+          in_data(5) = zfcloud(kcs)
+          in_data(6) = zclw(kcs)
+          idx1 = 7
+          idx2 = 7 + jppj
+          in_data(idx1:idx2) = zprt1d(kcs,:)
+          idx1 = idx2
+          idx2 = idx1 + jpdd
+          in_data(idx1:idx2) = zdryrt2(kcs,:)
+          idx1 = idx2
+          idx2 = idx1 + jpdw
+          in_data(idx1:idx2) = zwetrt2(kcs,:)
+          idx1 = idx2
+          idx2 = idx1 + jpspec
+          in_data(idx1:idx2) = zftr(kcs,:)
+          CALL torch_model_forward(mlp, in_tensors, out_tensors)
+          ncsteps_full(kcs) = out_data(1)
+        END IF
+
         ! Call asad_cdrive with segmented arrays
         CALL asad_cdrive(cdot(kcs:kce,:),                                      &
-                         zftr(kcs:kce,:),                                      &
-                         zp(kcs:kce),                                          &
-                         zt(kcs:kce),                                          &
-                         zq(kcs:kce),                                          &
-                         co2_1d(kcs:kce),                                      &
-                         zfcloud(kcs:kce),                                     &
-                         zclw(kcs:kce),                                        &
-                         j,i,klevel,                                           &
-                         zdryrt2(kcs:kce,:),                                   &
-                         zwetrt2(kcs:kce,:),                                   &
-                         rc_het(kcs:kce,:),                                    &
-                         zprt1d(kcs:kce,:),                                    &
-                         chunk_size,                                           &
-                         have_nat1d(kcs:kce),                                  &
-                         stratflag(kcs:kce),                                   &
-                         H_plus_1d_arr(kcs:kce))
+                        zftr(kcs:kce,:),                                       &
+                        zp(kcs:kce),                                           &
+                        zt(kcs:kce),                                           &
+                        zq(kcs:kce),                                           &
+                        co2_1d(kcs:kce),                                       &
+                        zfcloud(kcs:kce),                                      &
+                        zclw(kcs:kce),                                         &
+                        j,i,klevel,                                            &
+                        zdryrt2(kcs:kce,:),                                    &
+                        zwetrt2(kcs:kce,:),                                    &
+                        rc_het(kcs:kce,:),                                     &
+                        zprt1d(kcs:kce,:),                                     &
+                        chunk_size,                                            &
+                        have_nat1d(kcs:kce),                                   &
+                        stratflag(kcs:kce),                                    &
+                        H_plus_1d_arr(kcs:kce))
 
         ! Store the full column values of dpd, dpw, fpsc1,
         ! fpsc2, prk and y - these are needed later on
@@ -707,13 +898,23 @@ DO i=1,rows
                              fpsc1_full,fpsc2_full,                            &
                              j,i,klevel,ierr)
     ELSE
-      cmessage='Column call is not available for Backward Euler schemes'
+      cmessage='Column CALL is not available for Backward Euler schemes'
       errcode = 5
       CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
     END IF
   END DO
 END DO ! loop (j,i)
 !$OMP END DO
+
+! Close training data file for writing
+IF (training) THEN
+  CALL write_nc_integer_1d(iteration, "ncsteps", ncsteps_full)
+  DEALLOCATE(ncsteps_full)
+ELSE
+  call torch_delete(in_tensors)
+  call torch_delete(out_tensors)
+  call torch_delete(mlp)
+END IF
 
 IF (ALLOCATED(ystore)) DEALLOCATE(ystore)
 
@@ -842,7 +1043,7 @@ NULLIFY(slos)
 prod => pd(:,1:jpspec)
 slos => pd(:,jpspec+1:2*jpspec)
 
-! (re-)initialise DERIV array to 1.0 before each call to ASAD_CDRIVE
+! (re-)initialise DERIV array to 1.0 before each CALL to ASAD_CDRIVE
 ! to ensure bit-comparability when changing domain decomposition
 deriv(:,:,:) = 1.0
 
@@ -866,5 +1067,269 @@ prk(:,:)  = 0.0
 
 RETURN
 END SUBROUTINE ukca_reallocate_asad_arrays
+
+FUNCTION LOG2(x)
+  IMPLICIT NONE
+  INTEGER, INTENT(IN) :: x
+  INTEGER :: LOG2
+  LOG2 = NINT(LOG(REAL(x)) / LOG(2.0))
+END FUNCTION
+
+SUBROUTINE write_nc_integer_1d(iteration, variable, array)
+  USE errormessagelength_mod, ONLY: errormessagelength
+  USE ereport_mod, ONLY: ereport
+  USE umPrintMgr, ONLY: umMessage, umPrint
+  USE netcdf, ONLY : nf90_clobber, nf90_close, nf90_create, nf90_def_dim,      &
+                    nf90_def_var, nf90_enddef, nf90_int, nf90_put_var,         &
+                    nf90_noerr
+  IMPLICIT NONE
+  INTEGER, INTENT(IN) :: iteration
+  CHARACTER(LEN=*), INTENT(IN) :: variable
+  INTEGER, INTENT(IN) :: array(:)
+  CHARACTER(LEN=32) :: filename
+  INTEGER(KIND=4) :: ncid, varid, dimids(1), retval, nx
+  INTEGER :: errcode
+  CHARACTER(LEN=errormessagelength) :: cmessage
+  CHARACTER(LEN=*), PARAMETER :: RoutineName='write_nc_integer_1D'
+
+  ! Determine the filename
+  WRITE(UNIT=filename, FMT="(a27,'_',i1,'.nc')") TRIM(variable), iteration
+
+  ! Create a new NetCDF file
+  retval = nf90_create(TRIM(filename), nf90_clobber, ncid)
+  IF (retval /= nf90_noerr) THEN
+    errcode = iteration
+    WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+    CALL umPrint(umMessage,src=RoutineName)
+    cmessage='ERROR: Failed to create NetCDF file'
+    CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+  END IF
+
+  ! Define the dimensions
+  nx = size(array, 1)
+  retval = nf90_def_dim(ncid, "x", nx, dimids(1))
+  IF (retval /= nf90_noerr) THEN
+    errcode = iteration
+    WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+    CALL umPrint(umMessage,src=RoutineName)
+    cmessage='ERROR: Failed to define dimension x'
+    CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+  END IF
+
+  ! Define the variable
+  retval = nf90_def_var(ncid, TRIM(variable), nf90_int, dimids, varid)
+  IF (retval /= nf90_noerr) THEN
+    errcode = iteration
+    WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+    CALL umPrint(umMessage,src=RoutineName)
+    cmessage='ERROR: Failed to define variable'
+    CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+  END IF
+
+  ! End define mode
+  retval = nf90_enddef(ncid)
+  IF (retval /= nf90_noerr) THEN
+    errcode = iteration
+    WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+    CALL umPrint(umMessage,src=RoutineName)
+    cmessage='ERROR: Failed to end define mode'
+    CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+  END IF
+
+  ! Write the array to the file
+  retval = nf90_put_var(ncid, varid, array)
+  IF (retval /= nf90_noerr) THEN
+    errcode = iteration
+    WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+    CALL umPrint(umMessage,src=RoutineName)
+    cmessage='ERROR: Failed to write the array to file'
+    CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+  END IF
+
+  ! Close the NetCDF file
+  retval = nf90_close(ncid)
+  IF (retval /= nf90_noerr) THEN
+    errcode = iteration
+    WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+    CALL umPrint(umMessage,src=RoutineName)
+    cmessage='ERROR: Failed to close the file'
+    CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+  END IF
+END SUBROUTINE write_nc_integer_1d
+
+SUBROUTINE write_nc_real_1d(iteration, variable, array)
+  USE, intrinsic :: iso_fortran_env, ONLY: sp => real32
+  USE errormessagelength_mod, ONLY: errormessagelength
+  USE ereport_mod, ONLY: ereport
+  USE umPrintMgr, ONLY: umMessage, umPrint
+  USE netcdf, ONLY : nf90_clobber, nf90_close, nf90_create, nf90_def_dim,      &
+                    nf90_def_var, nf90_enddef, nf90_put_var, nf90_noerr,       &
+                    nf90_float
+  IMPLICIT NONE
+  INTEGER, INTENT(IN) :: iteration
+  CHARACTER(LEN=*), INTENT(IN) :: variable
+  REAL(sp), INTENT(IN) :: array(:)
+  CHARACTER(LEN=32) :: filename
+  INTEGER(KIND=4) :: ncid, varid, dimids(1), retval, nx
+  INTEGER :: errcode
+  CHARACTER(LEN=errormessagelength) :: cmessage
+  CHARACTER(LEN=*), PARAMETER :: RoutineName='write_nc_real_1D'
+
+  ! Determine the filename
+  WRITE(UNIT=filename, FMT="(a27,'_',i1,'.nc')") TRIM(variable), iteration
+
+  ! Create a new NetCDF file
+  retval = nf90_create(TRIM(filename), nf90_clobber, ncid)
+  IF (retval /= nf90_noerr) THEN
+    errcode = iteration
+    WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+    CALL umPrint(umMessage,src=RoutineName)
+    cmessage='ERROR: Failed to create NetCDF file'
+    CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+  END IF
+
+  ! Define the dimensions
+  nx = size(array, 1)
+  retval = nf90_def_dim(ncid, "x", nx, dimids(1))
+  IF (retval /= nf90_noerr) THEN
+    errcode = iteration
+    WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+    CALL umPrint(umMessage,src=RoutineName)
+    cmessage='ERROR: Failed to define dimension x'
+    CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+  END IF
+
+  ! Define the variable
+  retval = nf90_def_var(ncid, TRIM(variable), nf90_float, dimids, varid)
+  IF (retval /= nf90_noerr) THEN
+    errcode = iteration
+    WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+    CALL umPrint(umMessage,src=RoutineName)
+    cmessage='ERROR: Failed to define variable'
+    CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+  END IF
+
+  ! End define mode
+  retval = nf90_enddef(ncid)
+  IF (retval /= nf90_noerr) THEN
+    errcode = iteration
+    WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+    CALL umPrint(umMessage,src=RoutineName)
+    cmessage='ERROR: Failed to end define mode'
+    CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+  END IF
+
+  ! Write the array to the file
+  retval = nf90_put_var(ncid, varid, array)
+  IF (retval /= nf90_noerr) THEN
+    errcode = iteration
+    WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+    CALL umPrint(umMessage,src=RoutineName)
+    cmessage='ERROR: Failed to write the array to file'
+    CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+  END IF
+
+  ! Close the NetCDF file
+  retval = nf90_close(ncid)
+  IF (retval /= nf90_noerr) THEN
+    errcode = iteration
+    WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+    CALL umPrint(umMessage,src=RoutineName)
+    cmessage='ERROR: Failed to close the file'
+    CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+  END IF
+END SUBROUTINE write_nc_real_1d
+
+SUBROUTINE write_nc_real_2d(iteration, variable, array)
+  USE, intrinsic :: iso_fortran_env, ONLY: sp => real32
+  USE errormessagelength_mod, ONLY: errormessagelength
+  USE ereport_mod, ONLY: ereport
+  USE umPrintMgr, ONLY: umMessage, umPrint
+  USE netcdf, ONLY : nf90_clobber, nf90_close, nf90_create, nf90_def_dim,      &
+                    nf90_def_var, nf90_enddef, nf90_put_var, nf90_noerr,       &
+                    nf90_float
+  IMPLICIT NONE
+  INTEGER, INTENT(IN) :: iteration
+  CHARACTER(LEN=*), INTENT(IN) :: variable
+  REAL(sp), INTENT(IN) :: array(:,:)
+  CHARACTER(LEN=32) :: filename
+  INTEGER(KIND=4) :: ncid, varid, dimids(2), retval, nx, ny
+  INTEGER :: errcode
+  CHARACTER(LEN=errormessagelength) :: cmessage
+  CHARACTER(LEN=*), PARAMETER :: RoutineName='write_nc_real_2D'
+
+  ! Determine the filename
+  WRITE(UNIT=filename, FMT="(a27,'_',i1,'.nc')") TRIM(variable), iteration
+
+  ! Create a new NetCDF file
+  retval = nf90_create(TRIM(filename), nf90_clobber, ncid)
+  IF (retval /= nf90_noerr) THEN
+    errcode = iteration
+    WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+    CALL umPrint(umMessage,src=RoutineName)
+    cmessage='ERROR: Failed to create NetCDF file'
+    CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+  END IF
+
+  ! Define the dimensions
+  nx = size(array, 1)
+  retval = nf90_def_dim(ncid, "x", nx, dimids(1))
+  IF (retval /= nf90_noerr) THEN
+    errcode = iteration
+    WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+    CALL umPrint(umMessage,src=RoutineName)
+    cmessage='ERROR: Failed to define dimension x'
+    CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+  END IF
+  ny = size(array, 2)
+  retval = nf90_def_dim(ncid, "y", ny, dimids(2))
+  IF (retval /= nf90_noerr) THEN
+    errcode = iteration
+    WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+    CALL umPrint(umMessage,src=RoutineName)
+    cmessage='ERROR: Failed to define dimension y'
+    CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+  END IF
+
+  ! Define the variable
+  retval = nf90_def_var(ncid, TRIM(variable), nf90_float, dimids, varid)
+  IF (retval /= nf90_noerr) THEN
+    errcode = iteration
+    WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+    CALL umPrint(umMessage,src=RoutineName)
+    cmessage='ERROR: Failed to define variable'
+    CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+  END IF
+
+  ! End define mode
+  retval = nf90_enddef(ncid)
+  IF (retval /= nf90_noerr) THEN
+    errcode = iteration
+    WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+    CALL umPrint(umMessage,src=RoutineName)
+    cmessage='ERROR: Failed to end define mode'
+    CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+  END IF
+
+  ! Write the array to the file
+  retval = nf90_put_var(ncid, varid, array)
+  IF (retval /= nf90_noerr) THEN
+    errcode = iteration
+    WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+    CALL umPrint(umMessage,src=RoutineName)
+    cmessage='ERROR: Failed to write the array to file'
+    CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+  END IF
+
+  ! Close the NetCDF file
+  retval = nf90_close(ncid)
+  IF (retval /= nf90_noerr) THEN
+    errcode = iteration
+    WRITE(umMessage,'(A)') '** ERROR in ukca_chemistry_ctl'
+    CALL umPrint(umMessage,src=RoutineName)
+    cmessage='ERROR: Failed to close the file'
+    CALL ereport(ModuleName//':'//RoutineName,errcode,cmessage)
+  END IF
+END SUBROUTINE write_nc_real_2d
 
 END MODULE ukca_chemistry_ctl_col_mod
