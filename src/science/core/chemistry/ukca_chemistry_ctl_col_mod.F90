@@ -229,6 +229,8 @@ REAL :: fpsc2_full(model_levels)
 REAL :: prk_full(model_levels,jpnr)
 REAL :: y_full(model_levels,jpspec)
 
+INTEGER :: num_inputs
+
 LOGICAL :: l_autotune_local
 LOGICAL :: stratflag(model_levels)
 LOGICAL :: have_nat1d(model_levels)
@@ -246,7 +248,8 @@ TYPE(autotune_type), ALLOCATABLE, SAVE :: autotune_state
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
 
 ! Load the ML model
-call ftorch_setup(trim("mlstep_model_torchscript.pt"))
+num_inputs = 11 + jpcspf + jpdd + jpdw + jppj
+call ftorch_setup(trim("mlstep_model_torchscript.pt"), num_inputs)
 
 #if !defined(LFRIC)
 ! Set up automatic segment size tuning
