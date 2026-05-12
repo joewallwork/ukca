@@ -121,6 +121,8 @@ USE asad_diffun_mod, ONLY: asad_diffun
 USE asad_spimpmjp_mod, ONLY: asad_spimpmjp
 USE asad_ftoy_mod, ONLY: asad_ftoy
 
+USE ftorch_mod, ONLY: target_array
+
 IMPLICIT NONE
 
 ! Subroutine interface
@@ -271,6 +273,9 @@ END IF
 
 ncsteps = ncsteps_initial
 cdt = cdt_initial
+
+! Set expected number of chemistry steps
+target_array(1) = REAL(ncsteps)
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
 RETURN
