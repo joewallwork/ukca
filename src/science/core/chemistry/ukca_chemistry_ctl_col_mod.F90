@@ -230,6 +230,7 @@ REAL :: prk_full(model_levels,jpnr)
 REAL :: y_full(model_levels,jpspec)
 
 INTEGER :: num_inputs
+INTEGER :: jinput
 
 LOGICAL :: l_autotune_local
 LOGICAL :: stratflag(model_levels)
@@ -508,8 +509,16 @@ DO i=1,rows
         input_array(:,4) = co2_1d(kcs:kce)
         input_array(:,5) = zfcloud(kcs:kce)
         input_array(:,6) = zclw(kcs:kce)
-        input_array(:,7) = have_nat1d(kcs:kce)
-        input_array(:,8) = stratflag(kcs:kce)
+        WHERE (have_nat1d(kcs:kce))
+          input_array(:,7) = 1.0
+        ELSEWHERE
+          input_array(:,7) = 1.0
+        END WHERE
+        WHERE (stratflag(kcs:kce))
+          input_array(:,8) = 1.0
+        ELSEWHERE
+          input_array(:,8) = 1.0
+        END WHERE
         input_array(:,9) = H_plus_1d_arr(kcs:kce)
         input_array(:,10) = rc_het(kcs:kce,1)
         input_array(:,11) = rc_het(kcs:kce,2)
