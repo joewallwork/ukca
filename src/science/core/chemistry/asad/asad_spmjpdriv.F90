@@ -275,7 +275,7 @@ ncsteps = ncsteps_initial
 cdt = cdt_initial
 
 ! Set expected number of chemistry steps
-target_array(1) = REAL(ncsteps)
+target_array(:) = REAL(ncsteps)
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
 RETURN
