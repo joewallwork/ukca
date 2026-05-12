@@ -914,6 +914,12 @@ CONTAINS
     initialised = .TRUE.
   END SUBROUTINE ftorch_setup
 
+  ! Normalize the input array
+  SUBROUTINE ftorch_normalize_inputs()
+    IMPLICIT NONE
+    ! TODO: Needs implementing
+  END SUBROUTINE ftorch_normalize_inputs
+
   ! Take an optimizer step
   ! NOTE: Assumes target_array has been updated to contain expected halving
   ! steps values
@@ -953,4 +959,4 @@ CONTAINS
     CLOSE(UNIT=10)
   END SUBROUTINE ftorch_finish
 
-END MODULE
+END MODULE ftorch_mod

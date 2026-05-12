@@ -103,8 +103,8 @@ USE errormessagelength_mod, ONLY: errormessagelength
 
 USE asad_cdrive_mod, ONLY: asad_cdrive
 
-USE ftorch_mod, ONLY: ftorch_setup, ftorch_optim_step, ftorch_finish, &
-                      input_array
+USE ftorch_mod, ONLY: ftorch_setup, ftorch_normalize_inputs, &
+                      ftorch_optim_step, ftorch_finish, input_array
 
 !!!! Note: LFRIC-specific pre-processor directives used in this module are
 !!!! inappropriate in UKCA and should be removed but must be retained while
@@ -531,7 +531,8 @@ DO i=1,rows
           input_array(:,jinput) = zprt1d(kcs:kce,l)
         END DO
 
-        ! TODO: Normalise inputs
+        ! Normalise inputs
+        CALL ftorch_normalize_inputs()
 
         ! Call asad_cdrive with segmented arrays
         CALL asad_cdrive(zftr(kcs:kce,:),                                      &
@@ -552,7 +553,7 @@ DO i=1,rows
                          H_plus_1d_arr(kcs:kce))
 
         ! Take an optimizer step
-        call ftorch_optim_step()
+        CALL ftorch_optim_step()
 
         ! Store the full column values of dpd, dpw, fpsc1,
         ! fpsc2, prk and y - these are needed later on
