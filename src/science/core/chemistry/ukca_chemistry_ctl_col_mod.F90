@@ -103,6 +103,8 @@ USE errormessagelength_mod, ONLY: errormessagelength
 
 USE asad_cdrive_mod, ONLY: asad_cdrive
 
+USE ftorch_mod, ONLY: ftorch_setup, ftorch_step, input_array
+
 !!!! Note: LFRIC-specific pre-processor directives used in this module are
 !!!! inappropriate in UKCA and should be removed but must be retained while
 !!!! LFRic uses the UM version of ukca_um_legacy_mod which does not contain
@@ -241,6 +243,9 @@ TYPE(autotune_type), ALLOCATABLE, SAVE :: autotune_state
 #endif
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
+
+! Load the ML model
+call ftorch_setup(trim("mlstep_model_torchscript.pt"))
 
 #if !defined(LFRIC)
 ! Set up automatic segment size tuning
@@ -492,6 +497,11 @@ DO i=1,rows
           sph2o(1:chunk_size) = qcf(j,i,kcs:kce)/c_h2o
         END IF
 
+        ! TODO: Gather inputs
+        input_array(:,1) = zftr(kcs:kce)
+
+        ! TODO: Normalise inputs
+
         ! Call asad_cdrive with segmented arrays
         CALL asad_cdrive(zftr(kcs:kce,:),                                      &
                          zp(kcs:kce),                                          &
@@ -509,6 +519,9 @@ DO i=1,rows
                          have_nat1d(kcs:kce),                                  &
                          stratflag(kcs:kce),                                   &
                          H_plus_1d_arr(kcs:kce))
+
+        ! Take an optimizer step
+        call ftorch_step()
 
         ! Store the full column values of dpd, dpw, fpsc1,
         ! fpsc2, prk and y - these are needed later on
