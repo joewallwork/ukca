@@ -846,6 +846,7 @@ MODULE ftorch_mod
   REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: input_array
   REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: output_array
   REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: target_array
+  REAL(KIND=wp), DIMENSION(:), ALLOCATABLE, TARGET :: loss_array
 
   ! FTorch data structures
   TYPE(torch_optim) :: optimizer
@@ -870,6 +871,16 @@ CONTAINS
     INTEGER(KIND=c_int32_t), PARAMETER :: device_index = -1
     LOGICAL(KIND=4), PARAMETER :: requires_grad = .TRUE.
     LOGICAL(KIND=4), PARAMETER :: is_training = .TRUE.
+    LOGICAL :: exists
+
+    ! Create a file for recording the loss function progress
+    INQUIRE(FILE="losses_ftorch.dat", EXIST=exists)
+    IF (exists) THEN
+      OPEN(UNIT=10, FILE="losses_ftorch.dat", STATUS="old", POSITION="append", &
+           ACTION="write")
+    ELSE
+      OPEN(UNIT=10, FILE="losses_ftorch.dat", STATUS="new", ACTION="write")
+    END IF
 
     ! Do not initialise twice
     IF (initialised) THEN
@@ -885,6 +896,7 @@ CONTAINS
     CALL torch_tensor_from_array(input_tensors(1), input_array, torch_kCPU)
     CALL torch_tensor_from_array(output_tensors(1), output_array, torch_kCPU)
     CALL torch_tensor_from_array(target_tensors(1), target_array, torch_kCPU)
+    call torch_tensor_from_array(loss, loss_array, torch_kCPU)
 
     ! Initialise weights gradient tensor
     CALL torch_tensor_empty(weights_grad, ndims, weights_shape, &
@@ -911,6 +923,8 @@ CONTAINS
                       torch_tensor_mean
     IMPLICIT NONE
 
+    INTEGER :: i
+
     ! Zero the gradients associated with the optimizer
     CALL optimizer%zero_grad()
 
@@ -919,7 +933,12 @@ CONTAINS
 
     ! Evaluate loss function
     ! TODO: Support more suitable loss functions for integers
-    call torch_tensor_mean(loss, (output_tensors(1) - target_tensors(1)) ** 2)
+    CALL torch_tensor_mean(loss, (output_tensors(1) - target_tensors(1)) ** 2)
+
+    ! Log the loss values
+    DO i = 1, batch_size
+      WRITE(UNIT=10, FMT="(es10.4)") loss_array(i)
+    END DO
 
     ! Run back-propagation and extract the gradient with respect to the weights
     call torch_tensor_backward(loss)
@@ -928,5 +947,11 @@ CONTAINS
     ! Take an optimizer step
     CALL optimizer%step()
   END SUBROUTINE ftorch_optim_step
+
+  ! Finish the optimisation
+  SUBROUTINE ftorch_finish()
+    IMPLICIT NONE
+    CLOSE(UNIT=10)
+  END SUBROUTINE ftorch_finish
 
 END MODULE

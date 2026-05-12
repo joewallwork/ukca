@@ -103,7 +103,7 @@ USE errormessagelength_mod, ONLY: errormessagelength
 
 USE asad_cdrive_mod, ONLY: asad_cdrive
 
-USE ftorch_mod, ONLY: ftorch_setup, ftorch_step, input_array
+USE ftorch_mod, ONLY: ftorch_setup, ftorch_step, ftorch_finish, input_array
 
 !!!! Note: LFRIC-specific pre-processor directives used in this module are
 !!!! inappropriate in UKCA and should be removed but must be retained while
@@ -743,6 +743,8 @@ IF (l_autotune_segments) THEN
   CALL autotune_return(autotune_state)
 END IF
 #endif
+
+CALL ftorch_finish()
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
 RETURN
