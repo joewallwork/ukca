@@ -824,7 +824,6 @@ MODULE ftorch_mod
   USE iso_fortran_env, ONLY: sp => real32, dp => real64
   USE iso_c_binding, ONLY: c_int32_t, c_int64_t
   USE ukca_config_specification_mod, ONLY: ukca_config
-  USE asad_mod, ONLY: jpcspf, jpdd, jpdw, jppj
   USE ftorch, ONLY: torch_kCPU, torch_model, torch_tensor, torch_optim
   IMPLICIT NONE
   PUBLIC
@@ -834,7 +833,6 @@ MODULE ftorch_mod
 
   ! ML parameters
   INTEGER :: batch_size
-  INTEGER :: num_inputs = 10
   ! TODO: ndims will be architecture-dependent
   INTEGER(c_int32_t), PARAMETER :: ndims = 2
   ! TODO: weights_shape will be architecture-dependent
@@ -862,12 +860,13 @@ MODULE ftorch_mod
 CONTAINS
 
   ! Set up the model and tensors
-  SUBROUTINE ftorch_setup(model_file_name)
+  SUBROUTINE ftorch_setup(model_file_name, num_inputs)
     USE ftorch, ONLY: torch_kFloat32, torch_optim_SGD, &
                       torch_model_load, torch_model_parameters, &
                       torch_tensor_empty, torch_tensor_from_array
     IMPLICIT NONE
     CHARACTER(LEN=*), INTENT(IN) :: model_file_name
+    INTEGER, INTENT(IN) :: num_inputs
     INTEGER(KIND=c_int32_t), PARAMETER :: device_index = -1
     LOGICAL(KIND=4), PARAMETER :: requires_grad = .TRUE.
     LOGICAL(KIND=4), PARAMETER :: is_training = .TRUE.
@@ -886,9 +885,6 @@ CONTAINS
     IF (initialised) THEN
       RETURN
     END IF
-
-    ! Calculate the number of inputs
-    num_inputs = 11 + jpcspf + jpdd + jpdw + jppj
 
     ! Associate the tensors and arrays
     batch_size = ukca_config%ukca_chem_seg_size
