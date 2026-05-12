@@ -103,7 +103,8 @@ USE errormessagelength_mod, ONLY: errormessagelength
 
 USE asad_cdrive_mod, ONLY: asad_cdrive
 
-USE ftorch_mod, ONLY: ftorch_setup, ftorch_step, ftorch_finish, input_array
+USE ftorch_mod, ONLY: ftorch_setup, ftorch_optim_step, ftorch_finish, &
+                      input_array
 
 !!!! Note: LFRIC-specific pre-processor directives used in this module are
 !!!! inappropriate in UKCA and should be removed but must be retained while
@@ -497,8 +498,35 @@ DO i=1,rows
           sph2o(1:chunk_size) = qcf(j,i,kcs:kce)/c_h2o
         END IF
 
-        ! TODO: Gather inputs
-        input_array(:,1) = zftr(kcs:kce)
+        ! Gather inputs
+        input_array(:,1) = zp(kcs:kce)
+        input_array(:,2) = zt(kcs:kce)
+        input_array(:,3) = zq(kcs:kce)
+        input_array(:,4) = co2_1d(kcs:kce)
+        input_array(:,5) = zfcloud(kcs:kce)
+        input_array(:,6) = zclw(kcs:kce)
+        input_array(:,7) = have_nat1d(kcs:kce)
+        input_array(:,8) = stratflag(kcs:kce)
+        input_array(:,9) = H_plus_1d_arr(kcs:kce)
+        input_array(:,10) = rc_het(kcs:kce,1)
+        input_array(:,11) = rc_het(kcs:kce,2)
+        jinput = 11
+        DO l=1,jpcspf
+          jinput = jinput + 1
+          input_array(:,jinput) = zftr(kcs:kce,l)
+        END DO
+        DO l=1,jpdd
+          jinput = jinput + 1
+          input_array(:,jinput) = zdryrt2(kcs:kce,l)
+        END DO
+        DO l=1,jpdw
+          jinput = jinput + 1
+          input_array(:,jinput) = zwetrt2(kcs:kce,l)
+        END DO
+        DO l=1,jppj
+          jinput = jinput + 1
+          input_array(:,jinput) = zprt1d(kcs:kce,l)
+        END DO
 
         ! TODO: Normalise inputs
 
@@ -521,7 +549,7 @@ DO i=1,rows
                          H_plus_1d_arr(kcs:kce))
 
         ! Take an optimizer step
-        call ftorch_step()
+        call ftorch_optim_step()
 
         ! Store the full column values of dpd, dpw, fpsc1,
         ! fpsc2, prk and y - these are needed later on
