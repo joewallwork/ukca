@@ -818,3 +818,80 @@ IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
 END SUBROUTINE asad_mod_dealloc_spatial_vars
 
 END MODULE asad_mod
+
+! Module for stashing FTorch data structures and using them for online training
+MODULE ftorch_mod
+  USE iso_fortran_env, ONLY: sp => real32, dp => real64
+  USE iso_c_binding, ONLY: c_int64_t
+  USE ftorch, ONLY: torch_kCPU, torch_model, torch_tensor, torch_optim
+  IMPLICIT NONE
+  PUBLIC
+
+  ! Set working precision
+  INTEGER, PARAMETER :: wp = sp
+
+  ! ML parameters
+  ! TODO: num_inputs will likely need changing
+  INTEGER, PARAMETER :: num_inputs = 10
+  ! TODO: ndims will be architecture-dependent
+  integer, parameter :: ndims = 2
+  ! TODO: weights_shape will be architecture-dependent
+  INTEGER(c_int64_t), DIMENSION(ndims), PARAMETER :: weights_shape = [10, 10]
+  INTEGER, PARAMETER :: num_outputs = 1
+  REAL(KIND=dp) :: lr = 0.01
+
+  ! Fortran data structures
+  REAL(KIND=wp), DIMENSION(num_inputs), TARGET :: input_array
+  REAL(KIND=wp), DIMENSION(num_outputs), TARGET :: output_array
+  REAL(KIND=wp), DIMENSION(num_outputs), TARGET :: target_array
+
+  ! FTorch data structures
+  TYPE(torch_optim) :: optimizer
+  TYPE(torch_model) :: ml_model
+  TYPE(torch_tensor), DIMENSION(1) :: input_tensors
+  TYPE(torch_tensor), DIMENSION(1) :: output_tensors
+  TYPE(torch_tensor), DIMENSION(1) :: target_tensors
+  TYPE(torch_tensor), DIMENSION(1) :: weights_tensors
+  type(torch_tensor) :: weights_grad
+  type(torch_tensor) :: loss
+  LOGICAL :: initialised = .FALSE.
+
+CONTAINS
+
+  ! Set up the model and tensors
+  SUBROUTINE ftorch_setup(model_file_name)
+    USE ftorch, ONLY: torch_kFloat32, torch_optim_SGD, &
+                      torch_model_load, torch_model_parameters, &
+                      torch_tensor_empty, torch_tensor_from_array
+    IMPLICIT NONE
+    CHARACTER(LEN=*), INTENT(IN) :: model_file_name
+    LOGICAL(KIND=4), PARAMETER :: requires_grad = .TRUE.
+    LOGICAL(KIND=4), PARAMETER :: is_training = .TRUE.
+
+    ! Do not initialise twice
+    IF (initialised) THEN
+      RETURN
+    END IF
+
+    ! Associate the tensors and arrays
+    CALL torch_tensor_from_array(input_tensors(1), input_array, torch_kCPU)
+    CALL torch_tensor_from_array(output_tensors(1), output_array, torch_kCPU)
+    CALL torch_tensor_from_array(target_tensors(1), target_array, torch_kCPU)
+
+    ! Initialise weights gradient tensor
+    CALL torch_tensor_empty(weights_grad, ndims, weights_shape, &
+                            torch_kFloat32, torch_kCPU)
+
+    ! Load the ML model from file
+    CALL torch_model_load(ml_model, model_file_name, torch_kCPU, &
+                          requires_grad, is_training)
+
+    ! Get weights from model
+    CALL torch_model_parameters(ml_model, weights_tensors)
+
+    ! Initialise an optimizer and apply it to weights_tensor
+    CALL torch_optim_SGD(optimizer, weights_tensors, learning_rate=lr)
+
+    initialised = .TRUE.
+  END SUBROUTINE
+END MODULE
