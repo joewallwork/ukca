@@ -822,7 +822,7 @@ END MODULE asad_mod
 ! Module for stashing FTorch data structures and using them for online training
 MODULE ftorch_mod
   USE iso_fortran_env, ONLY: sp => real32, dp => real64
-  USE iso_c_binding, ONLY: c_int64_t
+  USE iso_c_binding, ONLY: c_int32_t, c_int64_t
   USE ftorch, ONLY: torch_kCPU, torch_model, torch_tensor, torch_optim
   IMPLICIT NONE
   PUBLIC
@@ -834,7 +834,7 @@ MODULE ftorch_mod
   ! TODO: num_inputs will likely need changing
   INTEGER, PARAMETER :: num_inputs = 10
   ! TODO: ndims will be architecture-dependent
-  integer, parameter :: ndims = 2
+  INTEGER(c_int32_t), PARAMETER :: ndims = 2
   ! TODO: weights_shape will be architecture-dependent
   INTEGER(c_int64_t), DIMENSION(ndims), PARAMETER :: weights_shape = [10, 10]
   INTEGER, PARAMETER :: num_outputs = 1
@@ -865,6 +865,7 @@ CONTAINS
                       torch_tensor_empty, torch_tensor_from_array
     IMPLICIT NONE
     CHARACTER(LEN=*), INTENT(IN) :: model_file_name
+    INTEGER(KIND=c_int32_t), PARAMETER :: device_index = -1
     LOGICAL(KIND=4), PARAMETER :: requires_grad = .TRUE.
     LOGICAL(KIND=4), PARAMETER :: is_training = .TRUE.
 
@@ -884,7 +885,7 @@ CONTAINS
 
     ! Load the ML model from file
     CALL torch_model_load(ml_model, model_file_name, torch_kCPU, &
-                          requires_grad, is_training)
+                          device_index, requires_grad, is_training)
 
     ! Get weights from model
     CALL torch_model_parameters(ml_model, weights_tensors)
@@ -893,13 +894,14 @@ CONTAINS
     CALL torch_optim_SGD(optimizer, weights_tensors, learning_rate=lr)
 
     initialised = .TRUE.
-  END SUBROUTINE
+  END SUBROUTINE ftorch_setup
 
   ! Take an optimizer step
   ! NOTE: Assumes target_array has been updated to contain expected halving
   ! steps values
   SUBROUTINE ftorch_optim_step()
-    USE ftorch, ONLY: torch_model_forward, torch_tensor_mean
+    USE ftorch, ONLY: OPERATOR(-), OPERATOR(**), torch_model_forward, &
+                      torch_tensor_mean
     IMPLICIT NONE
 
     ! Zero the gradients associated with the optimizer
