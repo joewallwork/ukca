@@ -823,6 +823,7 @@ END MODULE asad_mod
 MODULE ftorch_mod
   USE iso_fortran_env, ONLY: sp => real32, dp => real64
   USE iso_c_binding, ONLY: c_int32_t, c_int64_t
+  USE ukca_config_specification_mod, ONLY: ukca_config
   USE ftorch, ONLY: torch_kCPU, torch_model, torch_tensor, torch_optim
   IMPLICIT NONE
   PUBLIC
@@ -831,6 +832,7 @@ MODULE ftorch_mod
   INTEGER, PARAMETER :: wp = sp
 
   ! ML parameters
+  INTEGER, PARAMETER :: batch_size = ukca_config%ukca_chem_seg_size
   ! TODO: num_inputs will likely need changing
   INTEGER, PARAMETER :: num_inputs = 10
   ! TODO: ndims will be architecture-dependent
@@ -841,9 +843,9 @@ MODULE ftorch_mod
   REAL(KIND=dp) :: lr = 0.01
 
   ! Fortran data structures
-  REAL(KIND=wp), DIMENSION(num_inputs), TARGET :: input_array
-  REAL(KIND=wp), DIMENSION(num_outputs), TARGET :: output_array
-  REAL(KIND=wp), DIMENSION(num_outputs), TARGET :: target_array
+  REAL(KIND=wp), DIMENSION(batch_size, num_inputs), TARGET :: input_array
+  REAL(KIND=wp), DIMENSION(batch_size, num_outputs), TARGET :: output_array
+  REAL(KIND=wp), DIMENSION(batch_size, num_outputs), TARGET :: target_array
 
   ! FTorch data structures
   TYPE(torch_optim) :: optimizer
