@@ -832,7 +832,7 @@ MODULE ftorch_mod
   INTEGER, PARAMETER :: wp = sp
 
   ! ML parameters
-  INTEGER, PARAMETER :: batch_size = ukca_config%ukca_chem_seg_size
+  INTEGER :: batch_size
   ! TODO: num_inputs will likely need changing
   INTEGER, PARAMETER :: num_inputs = 10
   ! TODO: ndims will be architecture-dependent
@@ -843,9 +843,9 @@ MODULE ftorch_mod
   REAL(KIND=dp) :: lr = 0.01
 
   ! Fortran data structures
-  REAL(KIND=wp), DIMENSION(batch_size, num_inputs), TARGET :: input_array
-  REAL(KIND=wp), DIMENSION(batch_size, num_outputs), TARGET :: output_array
-  REAL(KIND=wp), DIMENSION(batch_size, num_outputs), TARGET :: target_array
+  REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: input_array
+  REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: output_array
+  REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: target_array
 
   ! FTorch data structures
   TYPE(torch_optim) :: optimizer
@@ -877,6 +877,11 @@ CONTAINS
     END IF
 
     ! Associate the tensors and arrays
+    batch_size = ukca_config%ukca_chem_seg_size
+    ALLOCATE(input_array(batch_size, num_inputs))
+    ALLOCATE(output_array(batch_size, num_outputs))
+    ALLOCATE(target_array(batch_size, num_outputs))
+    ALLOCATE(loss_array(batch_size))
     CALL torch_tensor_from_array(input_tensors(1), input_array, torch_kCPU)
     CALL torch_tensor_from_array(output_tensors(1), output_array, torch_kCPU)
     CALL torch_tensor_from_array(target_tensors(1), target_array, torch_kCPU)
