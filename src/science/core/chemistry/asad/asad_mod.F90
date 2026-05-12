@@ -894,4 +894,30 @@ CONTAINS
 
     initialised = .TRUE.
   END SUBROUTINE
+
+  ! Take an optimizer step
+  ! NOTE: Assumes target_array has been updated to contain expected halving
+  ! steps values
+  SUBROUTINE ftorch_optim_step()
+    USE ftorch, ONLY: torch_model_forward, torch_tensor_mean
+    IMPLICIT NONE
+
+    ! Zero the gradients associated with the optimizer
+    CALL optimizer%zero_grad()
+
+    ! Run inference to predict the number of halving steps
+    CALL torch_model_forward(ml_model, input_tensors, output_tensors)
+
+    ! Evaluate loss function
+    ! TODO: Support more suitable loss functions for integers
+    call torch_tensor_mean(loss, (output_tensors(1) - target_tensors(1)) ** 2)
+
+    ! Run back-propagation and extract the gradient with respect to the weights
+    call torch_tensor_backward(loss)
+    call torch_tensor_get_gradient(weights_grad, weights_tensors(1))
+
+    ! Take an optimizer step
+    CALL optimizer%step()
+  END SUBROUTINE ftorch_optim_step
+
 END MODULE
