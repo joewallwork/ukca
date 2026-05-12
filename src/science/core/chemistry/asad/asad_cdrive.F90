@@ -126,6 +126,11 @@ USE ukca_wetdep_mod, ONLY: ukca_wetdep
 USE ukca_photol_mod, ONLY: ukca_photol
 USE asad_posthet_mod, ONLY: asad_posthet
 USE asad_ftoy_mod, ONLY: asad_ftoy
+
+USE ftorch, ONLY: torch_model_forward
+USE ml_mod, ONLY: ml_setup, ml_normalize_inputs, ml_model, input_tensors, &
+                  scalar_input_array, ftr_input_array, dryrt_input_array, &
+                  wetrt_input_array, prt_input_array, rchet_input_array
 IMPLICIT NONE
 
 
@@ -168,13 +173,18 @@ INTEGER :: nl
 INTEGER :: ifam
 INTEGER :: itr
 INTEGER :: iodd
+INTEGER :: ncsteps_tmp
 
 INTEGER :: num_iter ! To store no.of iterations by chem solver
+
+INTEGER :: num_inputs(6)
 
 LOGICAL :: gfirst
 LOGICAL :: gphot
 
 LOGICAL :: first_call = .TRUE.
+
+CHARACTER(LEN=128) :: model_file_name = "mlstep_model_torchscript.pt"
 
 CHARACTER(LEN=errormessagelength) :: cmessage          ! Error message
 
@@ -184,13 +194,54 @@ REAL(KIND=jprb)               :: zhook_handle
 
 CHARACTER(LEN=*), PARAMETER :: RoutineName='ASAD_CDRIVE'
 
+IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
+
+! Load the ML model
+num_inputs(1) = 9
+num_inputs(2) = jpcspf
+num_inputs(3) = jpdd
+num_inputs(4) = jpdw
+num_inputs(5) = jppj
+num_inputs(6) = 2
+call ml_setup(trim(model_file_name), num_inputs)
+
+! Gather inputs
+scalar_input_array(:,1) = pp
+scalar_input_array(:,2) = pt
+scalar_input_array(:,3) = pq
+scalar_input_array(:,4) = co2_1d
+scalar_input_array(:,5) = cld_f
+scalar_input_array(:,6) = cld_l
+WHERE (have_nat)
+  scalar_input_array(:,7) = 1.0
+ELSEWHERE
+  scalar_input_array(:,7) = 0.0
+END WHERE
+WHERE (stratflag)
+  scalar_input_array(:,8) = 1.0
+ELSEWHERE
+  scalar_input_array(:,8) = 0.0
+END WHERE
+scalar_input_array(:,9) = H_plus_1d_arr
+ftr_input_array(:,:) = ftr
+dryrt_input_array(:,:) = dryrt
+wetrt_input_array(:,:) = wetrt
+prt_input_array(:,:) = prt
+rchet_input_array(:,:) = rc_het
+
+! Normalise inputs
+CALL ml_normalize_inputs()
+
+! Run inference to predict the number of halving steps
+CALL torch_model_forward(ml_model, input_tensors, output_tensors)
+ncsteps_tmp = ncsteps
+ncsteps = MAXVAL(output_array)
 
 !       1.  Initialise variables and arrays
 
 !       1.1   Clear tendencies to avoid contributions from levels
 !             on which no chemistry is performed
 
-IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
 DO jtr = 1, jpcspf
   DO jl = 1, n_points
     cdot(jl,jtr) = 0.0
@@ -198,6 +249,7 @@ DO jtr = 1, jpcspf
 END DO
 
 !       1.2  Copy pressure and temperature to asad_mod
+
 
 DO jl = 1, n_points
   p(jl) = pp(jl)
@@ -423,6 +475,15 @@ IF ( lvmr ) THEN
     END DO
   END DO
 END IF
+
+! ! TODO: Log any additional halvings, i.e., under-estimates
+! IF (ncsteps /= ncsteps_tmp) THEN
+!   OPEN(UNIT=10, FILE="halvings.dat", STATUS="old", POSITION="append", &
+!       ACTION="write")
+!   WRITE(UNIT=10, FMT="(I0,4(',',I0))") ix, jy, nlev, ncsteps_tmp, ncsteps
+!   CLOSE(UNIT=10)
+! END IF
+ncsteps = ncsteps_tmp
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
 RETURN

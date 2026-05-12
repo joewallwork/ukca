@@ -816,3 +816,96 @@ IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
 END SUBROUTINE asad_mod_dealloc_spatial_vars
 
 END MODULE asad_mod
+
+! Module for stashing FTorch data structures and using them for online training
+MODULE ml_mod
+  USE iso_fortran_env, ONLY: sp => real32, dp => real64
+  USE iso_c_binding, ONLY: c_int32_t, c_int64_t
+  USE ukca_config_specification_mod, ONLY: ukca_config
+  USE ftorch, ONLY: torch_kCPU, torch_model, torch_tensor, torch_optim
+  IMPLICIT NONE
+  PUBLIC
+
+  ! Set working precision
+  INTEGER, PARAMETER :: wp = sp
+
+  ! ML parameters
+  LOGICAL(KIND=4) :: training = .TRUE.
+  INTEGER :: batch_size
+  INTEGER, PARAMETER :: num_outputs = 1
+  REAL(KIND=dp) :: lr = 0.01
+
+  ! Fortran data structures
+  REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: scalar_input_array
+  REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: ftr_input_array
+  REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: dryrt_input_array
+  REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: wetrt_input_array
+  REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: prt_input_array
+  REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: rchet_input_array
+  REAL(KIND=wp), DIMENSION(:), ALLOCATABLE, TARGET :: output_array
+
+  ! FTorch data structures
+  TYPE(torch_model) :: ml_model
+  TYPE(torch_tensor), DIMENSION(6) :: input_tensors
+  TYPE(torch_tensor), DIMENSION(1) :: output_tensors
+  LOGICAL :: initialised = .FALSE.
+
+CONTAINS
+
+  ! Set up the model and tensors
+  SUBROUTINE ml_setup(model_file_name, num_inputs)
+    USE ftorch, ONLY: torch_kFloat32, torch_model_load, torch_tensor_from_array
+
+    IMPLICIT NONE
+    CHARACTER(LEN=*), INTENT(IN) :: model_file_name
+    INTEGER, DIMENSION(6), INTENT(IN) :: num_inputs
+    INTEGER(KIND=c_int32_t), PARAMETER :: device_index = -1
+    LOGICAL(KIND=4), PARAMETER :: requires_grad = .TRUE.
+    LOGICAL :: exists
+
+    ! Create a file for recording any additional halvings
+    INQUIRE(FILE="halvings.csv", EXIST=exists)
+    IF (.not. exists) THEN
+      OPEN(UNIT=10, FILE="halvings.csv", STATUS="new", ACTION="write")
+      WRITE(UNIT=10, FMT="(3(A1,1x),A7)") "i", "j", "k", "ncsteps"
+    END IF
+
+    ! Do not initialise twice
+    IF (initialised) THEN
+      RETURN
+    END IF
+
+    ! Associate the tensors and arrays
+    batch_size = ukca_config%ukca_chem_seg_size
+    ALLOCATE(scalar_input_array(batch_size, num_inputs(1)))
+    ALLOCATE(ftr_input_array(batch_size, num_inputs(2)))
+    ALLOCATE(dryrt_input_array(batch_size, num_inputs(3)))
+    ALLOCATE(wetrt_input_array(batch_size, num_inputs(4)))
+    ALLOCATE(prt_input_array(batch_size, num_inputs(5)))
+    ALLOCATE(rchet_input_array(batch_size, num_inputs(6)))
+    CALL torch_tensor_from_array(input_tensors(1), scalar_input_array, &
+                                 torch_kCPU)
+    CALL torch_tensor_from_array(input_tensors(2), ftr_input_array, torch_kCPU)
+    CALL torch_tensor_from_array(input_tensors(3), dryrt_input_array, &
+                                 torch_kCPU)
+    CALL torch_tensor_from_array(input_tensors(4), wetrt_input_array, &
+                                 torch_kCPU)
+    CALL torch_tensor_from_array(input_tensors(5), prt_input_array, torch_kCPU)
+    CALL torch_tensor_from_array(input_tensors(6), rchet_input_array, &
+                                 torch_kCPU)
+    CALL torch_tensor_from_array(output_tensors(1), output_array, torch_kCPU)
+
+    ! Load the ML model from file
+    CALL torch_model_load(ml_model, model_file_name, torch_kCPU, &
+                          device_index, requires_grad, .false.)
+
+    initialised = .TRUE.
+  END SUBROUTINE ml_setup
+
+  ! Normalize the input array
+  SUBROUTINE ml_normalize_inputs()
+    IMPLICIT NONE
+    ! TODO: Needs implementing
+  END SUBROUTINE ml_normalize_inputs
+
+END MODULE ml_mod
