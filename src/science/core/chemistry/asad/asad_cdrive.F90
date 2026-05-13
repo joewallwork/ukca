@@ -127,7 +127,8 @@ USE asad_posthet_mod, ONLY: asad_posthet
 USE asad_ftoy_mod, ONLY: asad_ftoy
 
 USE ftorch, ONLY: OPERATOR(-), OPERATOR(**), torch_tensor_get_gradient, &
-                  torch_model_forward, torch_tensor_mean, torch_tensor_backward
+                  torch_model_forward, torch_tensor_mean, &
+                  torch_tensor_backward, torch_model_save
 USE ml_mod, ONLY: training, ml_setup, ml_normalize_inputs, ml_model, loss, &
                   optimizer, input_tensors, output_tensors, target_tensors, &
                   loss_array, batch_size, weights_grad, weights_tensors, &
@@ -183,6 +184,8 @@ LOGICAL :: gphot
 
 LOGICAL :: first_call = .TRUE.
 
+CHARACTER(LEN=128) :: model_file_name = "mlstep_model_torchscript.pt"
+
 CHARACTER(LEN=errormessagelength) :: cmessage          ! Error message
 
 INTEGER(KIND=jpim), PARAMETER :: zhook_in  = 0
@@ -207,7 +210,7 @@ num_inputs(3) = jpdd
 num_inputs(4) = jpdw
 num_inputs(5) = jppj
 num_inputs(6) = 2
-call ml_setup(trim("mlstep_model_torchscript.pt"), num_inputs)
+call ml_setup(trim(model_file_name), num_inputs)
 
 ! Gather inputs
 scalar_input_array(:,1) = pp
@@ -446,6 +449,9 @@ IF (training) THEN
 
   ! Take an optimizer step
   CALL optimizer%step()
+
+  ! Overwrite the model file
+  CALL torch_model_save(ml_model, trim(model_file_name))
 END IF
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
