@@ -103,9 +103,6 @@ USE errormessagelength_mod, ONLY: errormessagelength
 
 USE asad_cdrive_mod, ONLY: asad_cdrive
 
-USE ftorch_mod, ONLY: ftorch_setup, ftorch_normalize_inputs, &
-                      ftorch_optim_step, ftorch_finish, input_array
-
 !!!! Note: LFRIC-specific pre-processor directives used in this module are
 !!!! inappropriate in UKCA and should be removed but must be retained while
 !!!! LFRic uses the UM version of ukca_um_legacy_mod which does not contain
@@ -229,9 +226,6 @@ REAL :: fpsc2_full(model_levels)
 REAL :: prk_full(model_levels,jpnr)
 REAL :: y_full(model_levels,jpspec)
 
-INTEGER :: num_inputs
-INTEGER :: jinput
-
 LOGICAL :: l_autotune_local
 LOGICAL :: stratflag(model_levels)
 LOGICAL :: have_nat1d(model_levels)
@@ -247,10 +241,6 @@ TYPE(autotune_type), ALLOCATABLE, SAVE :: autotune_state
 #endif
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
-
-! Load the ML model
-num_inputs = 11 + jpcspf + jpdd + jpdw + jppj
-call ftorch_setup(trim("mlstep_model_torchscript.pt"), num_inputs)
 
 #if !defined(LFRIC)
 ! Set up automatic segment size tuning
@@ -502,47 +492,6 @@ DO i=1,rows
           sph2o(1:chunk_size) = qcf(j,i,kcs:kce)/c_h2o
         END IF
 
-        ! Gather inputs
-        input_array(:,1) = zp(kcs:kce)
-        input_array(:,2) = zt(kcs:kce)
-        input_array(:,3) = zq(kcs:kce)
-        input_array(:,4) = co2_1d(kcs:kce)
-        input_array(:,5) = zfcloud(kcs:kce)
-        input_array(:,6) = zclw(kcs:kce)
-        WHERE (have_nat1d(kcs:kce))
-          input_array(:,7) = 1.0
-        ELSEWHERE
-          input_array(:,7) = 1.0
-        END WHERE
-        WHERE (stratflag(kcs:kce))
-          input_array(:,8) = 1.0
-        ELSEWHERE
-          input_array(:,8) = 1.0
-        END WHERE
-        input_array(:,9) = H_plus_1d_arr(kcs:kce)
-        input_array(:,10) = rc_het(kcs:kce,1)
-        input_array(:,11) = rc_het(kcs:kce,2)
-        jinput = 11
-        DO l=1,jpcspf
-          jinput = jinput + 1
-          input_array(:,jinput) = zftr(kcs:kce,l)
-        END DO
-        DO l=1,jpdd
-          jinput = jinput + 1
-          input_array(:,jinput) = zdryrt2(kcs:kce,l)
-        END DO
-        DO l=1,jpdw
-          jinput = jinput + 1
-          input_array(:,jinput) = zwetrt2(kcs:kce,l)
-        END DO
-        DO l=1,jppj
-          jinput = jinput + 1
-          input_array(:,jinput) = zprt1d(kcs:kce,l)
-        END DO
-
-        ! Normalise inputs
-        CALL ftorch_normalize_inputs()
-
         ! Call asad_cdrive with segmented arrays
         CALL asad_cdrive(zftr(kcs:kce,:),                                      &
                          zp(kcs:kce),                                          &
@@ -560,9 +509,6 @@ DO i=1,rows
                          have_nat1d(kcs:kce),                                  &
                          stratflag(kcs:kce),                                   &
                          H_plus_1d_arr(kcs:kce))
-
-        ! Take an optimizer step
-        CALL ftorch_optim_step()
 
         ! Store the full column values of dpd, dpw, fpsc1,
         ! fpsc2, prk and y - these are needed later on
@@ -784,8 +730,6 @@ IF (l_autotune_segments) THEN
   CALL autotune_return(autotune_state)
 END IF
 #endif
-
-CALL ftorch_finish()
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
 RETURN
