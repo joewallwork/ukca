@@ -125,6 +125,9 @@ USE ukca_wetdep_mod, ONLY: ukca_wetdep
 USE ukca_photol_mod, ONLY: ukca_photol
 USE asad_posthet_mod, ONLY: asad_posthet
 USE asad_ftoy_mod, ONLY: asad_ftoy
+
+USE ftorch_mod, ONLY: ftorch_setup, ftorch_normalize_inputs, &
+                      ftorch_optim_step, ftorch_finish, input_array
 IMPLICIT NONE
 
 
@@ -168,6 +171,9 @@ INTEGER :: iodd
 
 INTEGER :: num_iter ! To store no.of iterations by chem solver
 
+INTEGER :: num_inputs
+INTEGER :: jinput
+
 LOGICAL :: gfirst
 LOGICAL :: gphot
 
@@ -185,6 +191,51 @@ CHARACTER(LEN=*), PARAMETER :: RoutineName='ASAD_CDRIVE'
 !       1.  Initialise variables and arrays
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
+
+! Load the ML model
+num_inputs = 11 + jpcspf + jpdd + jpdw + jppj
+call ftorch_setup(trim("mlstep_model_torchscript.pt"), num_inputs)
+
+! Gather inputs
+input_array(:,1) = pp
+input_array(:,2) = pt
+input_array(:,3) = pq
+input_array(:,4) = co2_1d
+input_array(:,5) = cld_f
+input_array(:,6) = cld_l
+WHERE (have_nat)
+  input_array(:,7) = 1.0
+ELSEWHERE
+  input_array(:,7) = 0.0
+END WHERE
+WHERE (stratflag)
+  input_array(:,8) = 1.0
+ELSEWHERE
+  input_array(:,8) = 0.0
+END WHERE
+input_array(:,9) = H_plus_1d_arr
+input_array(:,10) = rc_het(:,1)
+input_array(:,11) = rc_het(:,2)
+jinput = 11
+DO jtr = 1,jpcspf
+  jinput = jinput + 1
+  input_array(:,jinput) = ftr(:,jtr)
+END DO
+DO jtr = 1,jpdd
+  jinput = jinput + 1
+  input_array(:,jinput) = dryrt(:,jtr)
+END DO
+DO jtr = 1,jpdw
+  jinput = jinput + 1
+  input_array(:,jinput) = wetrt(:,jtr)
+END DO
+DO jtr = 1,jppj
+  jinput = jinput + 1
+  input_array(:,jinput) = prt(:,jtr)
+END DO
+
+! Normalise inputs
+CALL ftorch_normalize_inputs()
 
 !       1.1  Copy pressure and temperature to asad_mod
 
@@ -372,6 +423,11 @@ IF ( lvmr ) THEN
     END DO
   END DO
 END IF
+
+
+! Take an optimizer step
+CALL ftorch_optim_step()
+CALL ftorch_finish()
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
 RETURN
