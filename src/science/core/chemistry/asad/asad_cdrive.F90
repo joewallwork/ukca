@@ -126,7 +126,11 @@ USE ukca_photol_mod, ONLY: ukca_photol
 USE asad_posthet_mod, ONLY: asad_posthet
 USE asad_ftoy_mod, ONLY: asad_ftoy
 
-USE ml_mod, ONLY: ml_setup, ml_normalize_inputs, ml_optim_step, ml_finish, &
+USE ftorch, ONLY: OPERATOR(-), OPERATOR(**), torch_tensor_get_gradient, &
+                  torch_model_forward, torch_tensor_mean, torch_tensor_backward
+USE ml_mod, ONLY: training, ml_setup, ml_normalize_inputs, ml_model, loss, &
+                  optimizer, input_tensors, output_tensors, target_tensors, &
+                  loss_array, batch_size, weights_grad, weights_tensors, &
                   scalar_input_array, ftr_input_array, dryrt_input_array, &
                   wetrt_input_array, prt_input_array, rchet_input_array
 IMPLICIT NONE
@@ -192,6 +196,10 @@ CHARACTER(LEN=*), PARAMETER :: RoutineName='ASAD_CDRIVE'
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
 
+IF (training) THEN
+  CALL optimizer%zero_grad()
+END IF
+
 ! Load the ML model
 num_inputs(1) = 9
 num_inputs(2) = jpcspf
@@ -227,6 +235,9 @@ rchet_input_array(:,:) = rc_het
 
 ! Normalise inputs
 CALL ml_normalize_inputs()
+
+! Run inference to predict the number of halving steps
+CALL torch_model_forward(ml_model, input_tensors, output_tensors)
 
 !       1.1  Copy pressure and temperature to asad_mod
 
@@ -416,9 +427,26 @@ IF ( lvmr ) THEN
 END IF
 
 
-! Take an optimizer step
-CALL ml_optim_step()
-CALL ml_finish()
+! Evaluate loss function
+! TODO: Support more suitable loss functions for integers
+! NOTE: Assumes target_array has been updated to contain expected halving
+! steps values
+CALL torch_tensor_mean(loss, (output_tensors(1) - target_tensors(1)) ** 2)
+
+! Log the loss values
+DO js = 1, batch_size
+  WRITE(UNIT=10, FMT="(es10.4)") loss_array(js)
+END DO
+CLOSE(UNIT=10)
+
+IF (training) THEN
+  ! Run back-propagation and extract the gradient with respect to the weights
+  call torch_tensor_backward(loss)
+  call torch_tensor_get_gradient(weights_grad, weights_tensors(1))
+
+  ! Take an optimizer step
+  CALL optimizer%step()
+END IF
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
 RETURN
