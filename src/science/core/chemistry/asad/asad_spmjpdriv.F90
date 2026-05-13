@@ -121,7 +121,7 @@ USE asad_diffun_mod, ONLY: asad_diffun
 USE asad_spimpmjp_mod, ONLY: asad_spimpmjp
 USE asad_ftoy_mod, ONLY: asad_ftoy
 
-USE ftorch_mod, ONLY: target_array
+USE ml_mod, ONLY: target_array
 
 IMPLICIT NONE
 
