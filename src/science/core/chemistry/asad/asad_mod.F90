@@ -832,6 +832,7 @@ MODULE ml_mod
   INTEGER, PARAMETER :: wp = sp
 
   ! ML parameters
+  LOGICAL(KIND=4) :: training = .TRUE.
   INTEGER :: batch_size
   ! TODO: ndims will be architecture-dependent
   INTEGER(c_int32_t), PARAMETER :: ndims = 2
@@ -874,7 +875,6 @@ CONTAINS
     INTEGER, DIMENSION(6), INTENT(IN) :: num_inputs
     INTEGER(KIND=c_int32_t), PARAMETER :: device_index = -1
     LOGICAL(KIND=4), PARAMETER :: requires_grad = .TRUE.
-    LOGICAL(KIND=4), PARAMETER :: is_training = .TRUE.
     LOGICAL :: exists
 
     ! Create a file for recording the loss function progress
@@ -916,19 +916,21 @@ CONTAINS
     CALL torch_tensor_from_array(target_tensors(1), target_array, torch_kCPU)
     call torch_tensor_from_array(loss, loss_array, torch_kCPU)
 
-    ! Initialise weights gradient tensor
-    CALL torch_tensor_empty(weights_grad, ndims, weights_shape, &
-                            torch_kFloat32, torch_kCPU)
-
     ! Load the ML model from file
     CALL torch_model_load(ml_model, model_file_name, torch_kCPU, &
-                          device_index, requires_grad, is_training)
+                          device_index, requires_grad, training)
 
-    ! Get weights from model
-    CALL torch_model_parameters(ml_model, weights_tensors)
+    IF (training) THEN
+      ! Initialise weights gradient tensor
+      CALL torch_tensor_empty(weights_grad, ndims, weights_shape, &
+                              torch_kFloat32, torch_kCPU)
 
-    ! Initialise an optimizer and apply it to weights_tensor
-    CALL torch_optim_SGD(optimizer, weights_tensors, learning_rate=lr)
+      ! Get weights from model
+      CALL torch_model_parameters(ml_model, weights_tensors)
+
+      ! Initialise an optimizer and apply it to weights_tensor
+      CALL torch_optim_SGD(optimizer, weights_tensors, learning_rate=lr)
+    END IF
 
     initialised = .TRUE.
   END SUBROUTINE ml_setup
@@ -938,44 +940,5 @@ CONTAINS
     IMPLICIT NONE
     ! TODO: Needs implementing
   END SUBROUTINE ml_normalize_inputs
-
-  ! Take an optimizer step
-  ! NOTE: Assumes target_array has been updated to contain expected halving
-  ! steps values
-  SUBROUTINE ml_optim_step()
-    USE ftorch, ONLY: OPERATOR(-), OPERATOR(**), torch_model_forward, &
-                      torch_tensor_mean
-    IMPLICIT NONE
-
-    INTEGER :: i
-
-    ! Zero the gradients associated with the optimizer
-    CALL optimizer%zero_grad()
-
-    ! Run inference to predict the number of halving steps
-    CALL torch_model_forward(ml_model, input_tensors, output_tensors)
-
-    ! Evaluate loss function
-    ! TODO: Support more suitable loss functions for integers
-    CALL torch_tensor_mean(loss, (output_tensors(1) - target_tensors(1)) ** 2)
-
-    ! Log the loss values
-    DO i = 1, batch_size
-      WRITE(UNIT=10, FMT="(es10.4)") loss_array(i)
-    END DO
-
-    ! Run back-propagation and extract the gradient with respect to the weights
-    call torch_tensor_backward(loss)
-    call torch_tensor_get_gradient(weights_grad, weights_tensors(1))
-
-    ! Take an optimizer step
-    CALL optimizer%step()
-  END SUBROUTINE ml_optim_step
-
-  ! Finish the optimisation
-  SUBROUTINE ml_finish()
-    IMPLICIT NONE
-    CLOSE(UNIT=10)
-  END SUBROUTINE ml_finish
 
 END MODULE ml_mod
