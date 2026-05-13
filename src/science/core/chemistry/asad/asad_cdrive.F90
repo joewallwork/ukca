@@ -127,7 +127,8 @@ USE asad_posthet_mod, ONLY: asad_posthet
 USE asad_ftoy_mod, ONLY: asad_ftoy
 
 USE ml_mod, ONLY: ml_setup, ml_normalize_inputs, ml_optim_step, ml_finish, &
-                  input_array
+                  scalar_input_array, ftr_input_array, dryrt_input_array, &
+                  wetrt_input_array, prt_input_array, rchet_input_array
 IMPLICIT NONE
 
 
@@ -171,8 +172,7 @@ INTEGER :: iodd
 
 INTEGER :: num_iter ! To store no.of iterations by chem solver
 
-INTEGER :: num_inputs
-INTEGER :: jinput
+INTEGER :: num_inputs(6)
 
 LOGICAL :: gfirst
 LOGICAL :: gphot
@@ -193,46 +193,37 @@ CHARACTER(LEN=*), PARAMETER :: RoutineName='ASAD_CDRIVE'
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
 
 ! Load the ML model
-num_inputs = 11 + jpcspf + jpdd + jpdw + jppj
+num_inputs(1) = 9
+num_inputs(2) = jpcspf
+num_inputs(3) = jpdd
+num_inputs(4) = jpdw
+num_inputs(5) = jppj
+num_inputs(6) = 2
 call ml_setup(trim("mlstep_model_torchscript.pt"), num_inputs)
 
 ! Gather inputs
-input_array(:,1) = pp
-input_array(:,2) = pt
-input_array(:,3) = pq
-input_array(:,4) = co2_1d
-input_array(:,5) = cld_f
-input_array(:,6) = cld_l
+scalar_input_array(:,1) = pp
+scalar_input_array(:,2) = pt
+scalar_input_array(:,3) = pq
+scalar_input_array(:,4) = co2_1d
+scalar_input_array(:,5) = cld_f
+scalar_input_array(:,6) = cld_l
 WHERE (have_nat)
-  input_array(:,7) = 1.0
+  scalar_input_array(:,7) = 1.0
 ELSEWHERE
-  input_array(:,7) = 0.0
+  scalar_input_array(:,7) = 0.0
 END WHERE
 WHERE (stratflag)
-  input_array(:,8) = 1.0
+  scalar_input_array(:,8) = 1.0
 ELSEWHERE
-  input_array(:,8) = 0.0
+  scalar_input_array(:,8) = 0.0
 END WHERE
-input_array(:,9) = H_plus_1d_arr
-input_array(:,10) = rc_het(:,1)
-input_array(:,11) = rc_het(:,2)
-jinput = 11
-DO jtr = 1,jpcspf
-  jinput = jinput + 1
-  input_array(:,jinput) = ftr(:,jtr)
-END DO
-DO jtr = 1,jpdd
-  jinput = jinput + 1
-  input_array(:,jinput) = dryrt(:,jtr)
-END DO
-DO jtr = 1,jpdw
-  jinput = jinput + 1
-  input_array(:,jinput) = wetrt(:,jtr)
-END DO
-DO jtr = 1,jppj
-  jinput = jinput + 1
-  input_array(:,jinput) = prt(:,jtr)
-END DO
+scalar_input_array(:,9) = H_plus_1d_arr
+ftr_input_array(:,:) = ftr
+dryrt_input_array(:,:) = dryrt
+wetrt_input_array(:,:) = wetrt
+prt_input_array(:,:) = prt
+rchet_input_array(:,:) = rc_het
 
 ! Normalise inputs
 CALL ml_normalize_inputs()

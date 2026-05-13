@@ -841,7 +841,12 @@ MODULE ml_mod
   REAL(KIND=dp) :: lr = 0.01
 
   ! Fortran data structures
-  REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: input_array
+  REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: scalar_input_array
+  REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: ftr_input_array
+  REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: dryrt_input_array
+  REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: wetrt_input_array
+  REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: prt_input_array
+  REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: rchet_input_array
   REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: output_array
   REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: target_array
   REAL(KIND=wp), DIMENSION(:), ALLOCATABLE, TARGET :: loss_array
@@ -849,7 +854,7 @@ MODULE ml_mod
   ! FTorch data structures
   TYPE(torch_optim) :: optimizer
   TYPE(torch_model) :: ml_model
-  TYPE(torch_tensor), DIMENSION(1) :: input_tensors
+  TYPE(torch_tensor), DIMENSION(6) :: input_tensors
   TYPE(torch_tensor), DIMENSION(1) :: output_tensors
   TYPE(torch_tensor), DIMENSION(1) :: target_tensors
   TYPE(torch_tensor), DIMENSION(1) :: weights_tensors
@@ -866,7 +871,7 @@ CONTAINS
                       torch_tensor_empty, torch_tensor_from_array
     IMPLICIT NONE
     CHARACTER(LEN=*), INTENT(IN) :: model_file_name
-    INTEGER, INTENT(IN) :: num_inputs
+    INTEGER, DIMENSION(6), INTENT(IN) :: num_inputs
     INTEGER(KIND=c_int32_t), PARAMETER :: device_index = -1
     LOGICAL(KIND=4), PARAMETER :: requires_grad = .TRUE.
     LOGICAL(KIND=4), PARAMETER :: is_training = .TRUE.
@@ -888,11 +893,25 @@ CONTAINS
 
     ! Associate the tensors and arrays
     batch_size = ukca_config%ukca_chem_seg_size
-    ALLOCATE(input_array(batch_size, num_inputs))
+    ALLOCATE(scalar_input_array(batch_size, num_inputs(1)))
+    ALLOCATE(ftr_input_array(batch_size, num_inputs(2)))
+    ALLOCATE(dryrt_input_array(batch_size, num_inputs(3)))
+    ALLOCATE(wetrt_input_array(batch_size, num_inputs(4)))
+    ALLOCATE(prt_input_array(batch_size, num_inputs(5)))
+    ALLOCATE(rchet_input_array(batch_size, num_inputs(6)))
     ALLOCATE(output_array(batch_size, num_outputs))
     ALLOCATE(target_array(batch_size, num_outputs))
     ALLOCATE(loss_array(batch_size))
-    CALL torch_tensor_from_array(input_tensors(1), input_array, torch_kCPU)
+    CALL torch_tensor_from_array(input_tensors(1), scalar_input_array, &
+                                 torch_kCPU)
+    CALL torch_tensor_from_array(input_tensors(2), ftr_input_array, torch_kCPU)
+    CALL torch_tensor_from_array(input_tensors(3), dryrt_input_array, &
+                                 torch_kCPU)
+    CALL torch_tensor_from_array(input_tensors(4), wetrt_input_array, &
+                                 torch_kCPU)
+    CALL torch_tensor_from_array(input_tensors(5), prt_input_array, torch_kCPU)
+    CALL torch_tensor_from_array(input_tensors(6), rchet_input_array, &
+                                 torch_kCPU)
     CALL torch_tensor_from_array(output_tensors(1), output_array, torch_kCPU)
     CALL torch_tensor_from_array(target_tensors(1), target_array, torch_kCPU)
     call torch_tensor_from_array(loss, loss_array, torch_kCPU)
