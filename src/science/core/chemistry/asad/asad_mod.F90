@@ -820,7 +820,7 @@ END SUBROUTINE asad_mod_dealloc_spatial_vars
 END MODULE asad_mod
 
 ! Module for stashing FTorch data structures and using them for online training
-MODULE ftorch_mod
+MODULE ml_mod
   USE iso_fortran_env, ONLY: sp => real32, dp => real64
   USE iso_c_binding, ONLY: c_int32_t, c_int64_t
   USE ukca_config_specification_mod, ONLY: ukca_config
@@ -860,7 +860,7 @@ MODULE ftorch_mod
 CONTAINS
 
   ! Set up the model and tensors
-  SUBROUTINE ftorch_setup(model_file_name, num_inputs)
+  SUBROUTINE ml_setup(model_file_name, num_inputs)
     USE ftorch, ONLY: torch_kFloat32, torch_optim_SGD, &
                       torch_model_load, torch_model_parameters, &
                       torch_tensor_empty, torch_tensor_from_array
@@ -912,18 +912,18 @@ CONTAINS
     CALL torch_optim_SGD(optimizer, weights_tensors, learning_rate=lr)
 
     initialised = .TRUE.
-  END SUBROUTINE ftorch_setup
+  END SUBROUTINE ml_setup
 
   ! Normalize the input array
-  SUBROUTINE ftorch_normalize_inputs()
+  SUBROUTINE ml_normalize_inputs()
     IMPLICIT NONE
     ! TODO: Needs implementing
-  END SUBROUTINE ftorch_normalize_inputs
+  END SUBROUTINE ml_normalize_inputs
 
   ! Take an optimizer step
   ! NOTE: Assumes target_array has been updated to contain expected halving
   ! steps values
-  SUBROUTINE ftorch_optim_step()
+  SUBROUTINE ml_optim_step()
     USE ftorch, ONLY: OPERATOR(-), OPERATOR(**), torch_model_forward, &
                       torch_tensor_mean
     IMPLICIT NONE
@@ -951,12 +951,12 @@ CONTAINS
 
     ! Take an optimizer step
     CALL optimizer%step()
-  END SUBROUTINE ftorch_optim_step
+  END SUBROUTINE ml_optim_step
 
   ! Finish the optimisation
-  SUBROUTINE ftorch_finish()
+  SUBROUTINE ml_finish()
     IMPLICIT NONE
     CLOSE(UNIT=10)
-  END SUBROUTINE ftorch_finish
+  END SUBROUTINE ml_finish
 
-END MODULE ftorch_mod
+END MODULE ml_mod

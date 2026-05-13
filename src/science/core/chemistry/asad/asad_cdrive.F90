@@ -126,8 +126,8 @@ USE ukca_photol_mod, ONLY: ukca_photol
 USE asad_posthet_mod, ONLY: asad_posthet
 USE asad_ftoy_mod, ONLY: asad_ftoy
 
-USE ftorch_mod, ONLY: ftorch_setup, ftorch_normalize_inputs, &
-                      ftorch_optim_step, ftorch_finish, input_array
+USE ml_mod, ONLY: ml_setup, ml_normalize_inputs, ml_optim_step, ml_finish, &
+                  input_array
 IMPLICIT NONE
 
 
@@ -194,7 +194,7 @@ IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
 
 ! Load the ML model
 num_inputs = 11 + jpcspf + jpdd + jpdw + jppj
-call ftorch_setup(trim("mlstep_model_torchscript.pt"), num_inputs)
+call ml_setup(trim("mlstep_model_torchscript.pt"), num_inputs)
 
 ! Gather inputs
 input_array(:,1) = pp
@@ -235,7 +235,7 @@ DO jtr = 1,jppj
 END DO
 
 ! Normalise inputs
-CALL ftorch_normalize_inputs()
+CALL ml_normalize_inputs()
 
 !       1.1  Copy pressure and temperature to asad_mod
 
@@ -426,8 +426,8 @@ END IF
 
 
 ! Take an optimizer step
-CALL ftorch_optim_step()
-CALL ftorch_finish()
+CALL ml_optim_step()
+CALL ml_finish()
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
 RETURN
