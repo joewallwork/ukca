@@ -199,10 +199,6 @@ CHARACTER(LEN=*), PARAMETER :: RoutineName='ASAD_CDRIVE'
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
 
-IF (training) THEN
-  CALL optimizer%zero_grad()
-END IF
-
 ! Load the ML model
 num_inputs(1) = 9
 num_inputs(2) = jpcspf
@@ -211,6 +207,10 @@ num_inputs(4) = jpdw
 num_inputs(5) = jppj
 num_inputs(6) = 2
 call ml_setup(trim(model_file_name), num_inputs)
+
+IF (training) THEN
+  CALL optimizer%zero_grad()
+END IF
 
 ! Gather inputs
 scalar_input_array(:,1) = pp
