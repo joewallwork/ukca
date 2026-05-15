@@ -131,7 +131,7 @@ USE ftorch, ONLY: OPERATOR(-), OPERATOR(**), torch_tensor_get_gradient, &
                   torch_tensor_backward, torch_model_save
 USE ml_mod, ONLY: training, ml_setup, ml_normalize_inputs, ml_model, loss, &
                   optimizer, input_tensors, output_tensors, target_tensors, &
-                  loss_array, batch_size, &
+                  target_array, loss_array, batch_size, &
                   scalar_input_array, ftr_input_array, dryrt_input_array, &
                   wetrt_input_array, prt_input_array, rchet_input_array
 IMPLICIT NONE
@@ -240,6 +240,7 @@ rchet_input_array(:,:) = rc_het
 CALL ml_normalize_inputs()
 
 ! Run inference to predict the number of halving steps
+target_array(:,:) = 0.0
 CALL torch_model_forward(ml_model, input_tensors, output_tensors)
 
 !       1.1  Copy pressure and temperature to asad_mod

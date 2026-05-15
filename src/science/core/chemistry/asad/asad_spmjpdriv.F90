@@ -181,6 +181,7 @@ END IF
 num_iter = 0
 iter = 1
 DO WHILE (iter <= iredo)
+  solver_iter = iredo
   CALL asad_spimpmjp(exit_code, ix, jy, nlev, n_points, location, solver_iter)
   num_iter = num_iter + solver_iter
 
@@ -273,11 +274,6 @@ END IF
 
 ncsteps = ncsteps_initial
 cdt = cdt_initial
-
-! Set expected number of chemistry steps
-! TODO: Get the number for each grid-box
-target_array(:,:) = 0.0
-target_array(:,ncsteps) = 1.0
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
 RETURN
