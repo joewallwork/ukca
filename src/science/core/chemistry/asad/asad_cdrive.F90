@@ -431,9 +431,9 @@ END IF
 
 
 ! Evaluate loss function
-! TODO: Support more suitable loss functions for integers
-! NOTE: Assumes target_array has been updated to contain expected halving
-! steps values
+! TODO: Move to CrossEntropyLoss
+! NOTE: Assumes target_array has been updated to indicate expected halving steps
+!       by putting one in the appropriate slot
 CALL torch_tensor_mean(loss, (output_tensors(1) - target_tensors(1)) ** 2)
 
 ! Log the loss values

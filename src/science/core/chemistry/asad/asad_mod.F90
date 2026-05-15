@@ -838,6 +838,7 @@ MODULE ml_mod
   INTEGER(c_int32_t), PARAMETER :: num_inputs = 6
   INTEGER(c_int32_t), PARAMETER :: num_weights = 2
   INTEGER(c_int32_t), PARAMETER :: num_outputs = 1
+  INTEGER(c_int32_t), PARAMETER :: output_size = 6
 
   ! Fortran data structures
   REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: scalar_input_array
@@ -896,8 +897,8 @@ CONTAINS
     ALLOCATE(wetrt_input_array(batch_size, input_sizes(4)))
     ALLOCATE(prt_input_array(batch_size, input_sizes(5)))
     ALLOCATE(rchet_input_array(batch_size, input_sizes(6)))
-    ALLOCATE(output_array(batch_size, num_outputs))
-    ALLOCATE(target_array(batch_size, num_outputs))
+    ALLOCATE(output_array(batch_size, output_size))
+    ALLOCATE(target_array(batch_size, output_size))
     ALLOCATE(loss_array(batch_size))
     CALL torch_tensor_from_array(input_tensors(1), scalar_input_array, &
                                  torch_kCPU)
