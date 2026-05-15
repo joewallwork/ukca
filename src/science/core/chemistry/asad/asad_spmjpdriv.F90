@@ -276,7 +276,8 @@ cdt = cdt_initial
 
 ! Set expected number of chemistry steps
 ! TODO: Get the number for each grid-box
-target_array(:,1) = REAL(ncsteps)
+target_array(:,:) = 0.0
+target_array(:,ncsteps) = 1.0
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
 RETURN
