@@ -131,7 +131,7 @@ USE ftorch, ONLY: OPERATOR(-), OPERATOR(**), torch_tensor_get_gradient, &
                   torch_tensor_backward, torch_model_save
 USE ml_mod, ONLY: training, ml_setup, ml_normalize_inputs, ml_model, loss, &
                   optimizer, input_tensors, output_tensors, target_tensors, &
-                  loss_array, batch_size, weights_grad, weights_tensors, &
+                  loss_array, batch_size, &
                   scalar_input_array, ftr_input_array, dryrt_input_array, &
                   wetrt_input_array, prt_input_array, rchet_input_array
 IMPLICIT NONE
@@ -443,9 +443,8 @@ END DO
 CLOSE(UNIT=10)
 
 IF (training) THEN
-  ! Run back-propagation and extract the gradient with respect to the weights
+  ! Run back-propagation
   call torch_tensor_backward(loss)
-  call torch_tensor_get_gradient(weights_grad, weights_tensors(1))
 
   ! Take an optimizer step
   CALL optimizer%step()

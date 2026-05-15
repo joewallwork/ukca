@@ -834,12 +834,10 @@ MODULE ml_mod
   ! ML parameters
   LOGICAL(KIND=4) :: training = .TRUE.
   INTEGER :: batch_size
-  ! TODO: ndims will be architecture-dependent
-  INTEGER(c_int32_t), PARAMETER :: ndims = 2
-  ! TODO: weights_shape will be architecture-dependent
-  INTEGER(c_int64_t), DIMENSION(ndims), PARAMETER :: weights_shape = [10, 10]
-  INTEGER, PARAMETER :: num_outputs = 1
   REAL(KIND=dp) :: lr = 0.01
+  INTEGER(c_int32_t), PARAMETER :: num_inputs = 6
+  INTEGER(c_int32_t), PARAMETER :: num_weights = 2
+  INTEGER(c_int32_t), PARAMETER :: num_outputs = 1
 
   ! Fortran data structures
   REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: scalar_input_array
@@ -855,24 +853,23 @@ MODULE ml_mod
   ! FTorch data structures
   TYPE(torch_optim) :: optimizer
   TYPE(torch_model) :: ml_model
-  TYPE(torch_tensor), DIMENSION(6) :: input_tensors
-  TYPE(torch_tensor), DIMENSION(1) :: output_tensors
-  TYPE(torch_tensor), DIMENSION(1) :: target_tensors
-  TYPE(torch_tensor), DIMENSION(1) :: weights_tensors
-  type(torch_tensor) :: weights_grad
+  TYPE(torch_tensor), DIMENSION(num_inputs) :: input_tensors
+  TYPE(torch_tensor), DIMENSION(num_outputs) :: output_tensors
+  TYPE(torch_tensor), DIMENSION(num_outputs) :: target_tensors
+  TYPE(torch_tensor), DIMENSION(num_weights) :: weights_tensors
   type(torch_tensor) :: loss
   LOGICAL :: initialised = .FALSE.
 
 CONTAINS
 
   ! Set up the model and tensors
-  SUBROUTINE ml_setup(model_file_name, num_inputs)
+  SUBROUTINE ml_setup(model_file_name, input_sizes)
     USE ftorch, ONLY: torch_kFloat32, torch_optim_SGD, &
                       torch_model_load, torch_model_parameters, &
                       torch_tensor_empty, torch_tensor_from_array
     IMPLICIT NONE
     CHARACTER(LEN=*), INTENT(IN) :: model_file_name
-    INTEGER, DIMENSION(6), INTENT(IN) :: num_inputs
+    INTEGER, DIMENSION(6), INTENT(IN) :: input_sizes
     INTEGER(KIND=c_int32_t), PARAMETER :: device_index = -1
     LOGICAL(KIND=4), PARAMETER :: requires_grad = .TRUE.
     LOGICAL :: exists
@@ -893,12 +890,12 @@ CONTAINS
 
     ! Associate the tensors and arrays
     batch_size = ukca_config%ukca_chem_seg_size
-    ALLOCATE(scalar_input_array(batch_size, num_inputs(1)))
-    ALLOCATE(ftr_input_array(batch_size, num_inputs(2)))
-    ALLOCATE(dryrt_input_array(batch_size, num_inputs(3)))
-    ALLOCATE(wetrt_input_array(batch_size, num_inputs(4)))
-    ALLOCATE(prt_input_array(batch_size, num_inputs(5)))
-    ALLOCATE(rchet_input_array(batch_size, num_inputs(6)))
+    ALLOCATE(scalar_input_array(batch_size, input_sizes(1)))
+    ALLOCATE(ftr_input_array(batch_size, input_sizes(2)))
+    ALLOCATE(dryrt_input_array(batch_size, input_sizes(3)))
+    ALLOCATE(wetrt_input_array(batch_size, input_sizes(4)))
+    ALLOCATE(prt_input_array(batch_size, input_sizes(5)))
+    ALLOCATE(rchet_input_array(batch_size, input_sizes(6)))
     ALLOCATE(output_array(batch_size, num_outputs))
     ALLOCATE(target_array(batch_size, num_outputs))
     ALLOCATE(loss_array(batch_size))
@@ -921,10 +918,6 @@ CONTAINS
                           device_index, requires_grad, training)
 
     IF (training) THEN
-      ! Initialise weights gradient tensor
-      CALL torch_tensor_empty(weights_grad, ndims, weights_shape, &
-                              torch_kFloat32, torch_kCPU)
-
       ! Get weights from model
       CALL torch_model_parameters(ml_model, weights_tensors)
 
