@@ -351,6 +351,8 @@ LOGICAL :: ljacx
 ! shared between asad_spimpmjp and asad_spmjpdriv
 LOGICAL :: ltrig
 
+INTEGER, ALLOCATABLE, DIMENSION(:) :: ncsteps_array
+
 CHARACTER(LEN=*), PARAMETER, PRIVATE :: ModuleName='ASAD_MOD'
 
 ! Variables which should be stored separately on each thread
@@ -691,6 +693,7 @@ IF (.NOT. ALLOCATED(co2)) ALLOCATE(co2(n_points))
 IF (.NOT. ALLOCATED(y)) ALLOCATE(y(n_points,jpspec))
 IF (.NOT. ALLOCATED(ydot)) ALLOCATE(ydot(n_points,jpspec))
 IF (.NOT. ALLOCATED(za)) ALLOCATE(za(n_points))
+IF (.NOT. ALLOCATED(ncsteps_array)) ALLOCATE(ncsteps_array(n_points))
 
 IF (method == int_method_NR) THEN
   IF (.NOT. ALLOCATED(spfj))  ALLOCATE(spfj(n_points,spfjsize_max))
@@ -743,6 +746,8 @@ za(:)     = 0.0
 !     Clear the rates and index arrays
 rk(:,:)   = 0.0
 prk(:,:)  = 0.0
+
+ncsteps_array(:) = 0
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
 RETURN
@@ -810,6 +815,7 @@ IF (ALLOCATED(dpd)) DEALLOCATE(dpd)
 IF (ALLOCATED(deriv)) DEALLOCATE(deriv)
 IF (ALLOCATED(co3)) DEALLOCATE(co3)
 IF (ALLOCATED(pd)) DEALLOCATE(pd)
+IF (ALLOCATED(ncsteps_array)) DEALLOCATE(ncsteps_array)
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
 
