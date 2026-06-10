@@ -61,10 +61,11 @@ SUBROUTINE ukca_chemistry_ctl_col(                                             &
                 atm_mebr_mol,                                                  &
                 atm_h2_mol,                                                    &
                 H_plus_3d_arr,                                                 &
-                zdryrt, zwetrt, nlev_with_ddep                                 &
+                zdryrt, zwetrt, nlev_with_ddep,                                &
+                ncsteps3d                                                      &
                 )
 
-USE asad_mod,             ONLY: advt, cdt, ctype,                              &
+USE asad_mod,             ONLY: advt, cdt, ctype, ncsteps_array,               &
                                 dpd, dpw, fpsc1, fpsc2,                        &
                                 ihso3_h2o2, ihso3_o3, ih2so4_hv, iso2_oh,      &
                                 iso3_o3, jpctr, jpcspf, jpdd, jpdw, jpnr,      &
@@ -177,6 +178,9 @@ TYPE(ntp_type), INTENT(IN OUT) :: all_ntp(dim_ntp)
 
 ! Mask to limit formation of Nat below specified height
 LOGICAL, INTENT(IN) :: have_nat3d(row_length,rows,model_levels)
+
+! Array of numbers of chemistry timesteps in each grid-box
+INTEGER, INTENT(OUT) :: ncsteps3d(row_length,rows,model_levels)
 
 ! Local variables
 INTEGER :: i             ! Loop variable
@@ -684,6 +688,9 @@ DO i=1,rows
           END IF
 
         END DO ! End loop through species in zftr array
+
+        ! Store ncsteps in full 3D array
+        ncsteps3d(j,i,kcs:kce) = ncsteps_array
 
       END DO ! end chunking loop
 
