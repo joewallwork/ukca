@@ -2227,6 +2227,11 @@ IF (ukca_config%l_ukca_chem) THEN
          l_firstchem                                                           &
          )
 
+    ! Output tracer concentrations *before* call to ukca_chemistry_ctl*
+    IF (L_asad_use_chem_diags .AND. L_asad_use_output_tracer)                  &
+      CALL asad_output_tracer(row_length, rows, model_levels,                  &
+                              n_chem_tracers, all_tracers, ierr)
+
     IF (ukca_config%l_ukca_offline_be) THEN
 
       ! Offline chemistry with explicit backward-Euler solver
@@ -2453,6 +2458,43 @@ IF (ukca_config%l_ukca_chem) THEN
            ncsteps3d                                                           &
            )
     END IF
+
+    ! TODO: Fields to write out via STASH:
+    ! - p_theta_levels  (already handled)
+    ! - t_chem          (already handled)
+    ! - q_chem          (already handled)
+    ! - qcf             (already handled)
+    ! - qcl             (already handled)
+    ! - tracer_in       (already handled but output needs moving here)
+    ! - cloud_frac      (already handled)
+    ! - photol_rates    (already handled)
+    ! - so4_sa          (already handled)
+    ! - zdryrt          (already handled)
+    ! - zwetrt          (already handled)
+    ! - co2_interactive (already handled)
+    ! - L_stratosphere  (already handled)
+    ! - shno3_3d        (WIP)
+    ! - ncsteps3d       (WIP)
+    ! - rk_full         (WIP)
+
+    ! Copy ncsteps3d into STASH work array
+    section = UKCA_diag_sect
+    item = 50008
+    CALL copydiag_3d(stashwork(si(item,section,im_index):                      &
+            si_last(item,section,im_index)),                                   &
+            ncsteps3d(:,:,:),                                                  &
+            row_length, rows, model_levels,                                    &
+            stlist(:,stindex(1,item,section,im_index)), len_stlist,            &
+            stash_levels, num_stash_levels+1)
+
+    ! Copy shno3_3d into STASH work array
+    item = 50009
+    CALL copydiag_3d(stashwork(si(item,section,im_index):                      &
+            si_last(item,section,im_index)),                                   &
+            shno3_3d(:,:,:),                                                   &
+            row_length, rows, model_levels,                                    &
+            stlist(:,stindex(1,item,section,im_index)), len_stlist,            &
+            stash_levels, num_stash_levels+1)
 
     ! ASAD post-processing
     IF (.NOT. ukca_config%l_ukca_offline_be) THEN
@@ -2741,13 +2783,13 @@ END IF   ! ukca_config%l_ukca_mode
 ! 5. Output prognostics and diagnostics
 ! ----------------------------------------------------------------------
 
-! ----------------------------------------------------------------------
-! 5.1 Copy prognostics
-! ----------------------------------------------------------------------
-! Take a copy of tracer fields if requested for diagnostic purposes
-IF (L_asad_use_chem_diags .AND. L_asad_use_output_tracer)                      &
-     CALL asad_output_tracer(row_length, rows, model_levels,                   &
-                             n_chem_tracers, all_tracers, ierr)
+! ! ----------------------------------------------------------------------
+! ! 5.1 Copy prognostics
+! ! ----------------------------------------------------------------------
+! ! Take a copy of tracer fields if requested for diagnostic purposes
+! IF (L_asad_use_chem_diags .AND. L_asad_use_output_tracer)                      &
+!      CALL asad_output_tracer(row_length, rows, model_levels,                   &
+!                              n_chem_tracers, all_tracers, ierr)
 
 ! ----------------------------------------------------------------------
 ! 5.2 Service diagnostic requests.
