@@ -126,7 +126,7 @@ IF (ukca_config%l_ukca_trop) THEN
   n_3d_emissions = 1       ! aircraft NOX
   n_aero_tracers = 0
   ALLOCATE(em_chem_spec(n_chem_emissions+n_3d_emissions))
-  n_chem_tracers =  26
+  n_chem_tracers =  43
   nr_therm       = 102        ! thermal reactions
   nr_phot        = 27         ! photolytic ---"---
   nmax_strat_fluxdiags = n_chem_tracers
@@ -141,7 +141,7 @@ ELSE IF (ukca_config%l_ukca_tropisop .AND. ukca_config%l_ukca_achem) THEN
   n_chem_emissions = 19    ! 2D emission fields
   n_3d_emissions = 4       ! SO2_nat, BC & OC biomass, aircraft NOX
   n_aero_tracers = 9       ! DMS, SO2... aerosol precursor species
-  n_chem_tracers = 51
+  n_chem_tracers = 68
 
   ! add extra allocation for microplastics
   IF (ukca_config%l_ukca_mode .AND. glomap_config%i_mode_setup == 13) THEN
@@ -175,7 +175,7 @@ ELSE IF (ukca_config%l_ukca_tropisop .AND. .NOT. ukca_config%l_ukca_achem) THEN
   n_3d_emissions = 1       ! aircraft NOX
   n_aero_tracers = 0
   ALLOCATE(em_chem_spec(n_chem_emissions+n_3d_emissions))
-  n_chem_tracers = 49
+  n_chem_tracers = 66
   nr_therm       = 132
   nr_phot        = 35
   nmax_strat_fluxdiags = n_chem_tracers
@@ -189,7 +189,7 @@ ELSE IF (ukca_config%l_ukca_aerchem) THEN
   ! ======================================================
   n_chem_emissions = 18       ! Surface/ high-level emissions
   n_3d_emissions = 4          ! SO2_nat, aircraft NOX, OC & BC Biomass
-  n_chem_tracers = 26         ! advected chemical tracers
+  n_chem_tracers = 43         ! advected chemical tracers
   n_aero_tracers =  7         ! advected aerochem ---"---
   nr_therm       = 137        ! thermal reactions
   nr_phot        = 27         ! photolytic ---"---
