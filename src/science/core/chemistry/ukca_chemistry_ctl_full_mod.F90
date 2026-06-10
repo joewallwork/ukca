@@ -62,7 +62,8 @@ SUBROUTINE ukca_chemistry_ctl_full(                                            &
                 atm_h2_mol,                                                    &
                 H_plus,                                                        &
                 zdryrt, zwetrt, nlev_with_ddep, L_stratosphere,                &
-                co2_interactive, firstcall                                     &
+                co2_interactive, firstcall,                                    &
+                ncsteps3d                                                      &
                 )
 
 USE asad_mod,             ONLY: advt, cdt, ctype,                              &
@@ -163,6 +164,9 @@ LOGICAL, INTENT(IN) :: L_stratosphere(tot_n_pnts)
 
 ! Flag for determining if this is the first chemistry call
 LOGICAL, INTENT(IN) :: firstcall
+
+! Array of numbers of chemistry timesteps in each grid-box
+INTEGER, INTENT(OUT) :: ncsteps3d(tot_n_pnts)
 
 ! Local variables
 INTEGER :: ix            ! dummy variable
@@ -520,6 +524,9 @@ DO jspf = 1, jpcspf
 END DO ! End loop through species in zftr array
 !$OMP END DO
 !$OMP END PARALLEL
+
+! Store ncsteps in full 3D array
+ncsteps3d(:) = ncsteps_array
 
 IF (ALLOCATED(ystore)) DEALLOCATE(ystore)
 

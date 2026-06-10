@@ -62,14 +62,15 @@ SUBROUTINE ukca_chemistry_ctl(                                                 &
                 atm_h2_mol,                                                    &
                 H_plus,                                                        &
                 zdryrt, zwetrt, nlev_with_ddep, co2_interactive,               &
-                L_stratosphere, firstcall                                      &
+                L_stratosphere, firstcall,                                     &
+                ncsteps3d                                                      &
                 )
 
 USE asad_mod,             ONLY: advt, cdt, ctype,                              &
                                 ihso3_h2o2, ihso3_o3, ih2so4_hv, iso2_oh,      &
                                 iso3_o3, jpctr, jpcspf, jpdd, jpdw, jpnr,      &
                                 jppj, jpro2, jpspec, nadvt, nlnaro2, nprkx,    &
-                                o1d_in_ss, o3p_in_ss, rk,                      &
+                                o1d_in_ss, o3p_in_ss, rk, ncsteps_array,       &
                                 specf, speci, sph2o, sphno3, spro2, tnd, y, za
 USE asad_chem_flux_diags, ONLY: l_asad_use_chem_diags,                         &
                                 l_asad_use_drydep,                             &
@@ -160,6 +161,9 @@ LOGICAL, INTENT(IN) :: L_stratosphere(tot_n_pnts)
 
 ! Flag for determining if this is the first chemistry call
 LOGICAL, INTENT(IN) :: firstcall
+
+! Array of numbers of chemistry timesteps in each grid-box
+INTEGER, INTENT(OUT) :: ncsteps3d(theta_field_size,model_levels)
 
 ! Local variables
 INTEGER :: ix            ! dummy variable
@@ -601,6 +605,9 @@ DO k=1,model_levels
     END IF
 
   END DO ! End loop through species in zftr array
+
+  ! Store ncsteps in full 3D array
+  ncsteps3d(:,k) = ncsteps_array
 
 END DO ! level loop (k)
 !$OMP END DO

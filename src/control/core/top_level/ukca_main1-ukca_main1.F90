@@ -581,6 +581,10 @@ REAL(KIND=jprb)               :: zhook_handle
 TYPE(autotune_type), ALLOCATABLE, SAVE :: autotune_state
 #endif
 
+INTEGER :: ncsteps3d(ukca_config%row_length, &
+                     ukca_config%rows, &
+                     ukca_config%model_levels)
+
 CHARACTER(LEN=*), PARAMETER :: RoutineName='UKCA_MAIN1'
 
 !- End of header
@@ -2369,7 +2373,8 @@ IF (ukca_config%l_ukca_chem) THEN
            atm_h2_mol,                                                         &
            H_plus_3d_arr,                                                      &
            zdryrt, zwetrt, nlev_with_ddep, L_stratosphere, co2_interactive,    &
-           l_firstchem                                                         &
+           l_firstchem,                                                        &
+           ncsteps3d                                                           &
            )
 
     ELSE IF (ukca_config%l_ukca_asad_columns) THEN
@@ -2406,7 +2411,8 @@ IF (ukca_config%l_ukca_chem) THEN
            atm_mebr_mol,                                                       &
            atm_h2_mol,                                                         &
            H_plus_3d_arr,                                                      &
-           zdryrt, zwetrt, nlev_with_ddep                                      &
+           zdryrt, zwetrt, nlev_with_ddep,                                     &
+           ncsteps3d                                                           &
            )
 
     ELSE
@@ -2443,7 +2449,8 @@ IF (ukca_config%l_ukca_chem) THEN
            atm_h2_mol,                                                         &
            H_plus_3d_arr,                                                      &
            zdryrt, zwetrt, nlev_with_ddep, co2_interactive, L_stratosphere,    &
-           l_firstchem                                                         &
+           l_firstchem,                                                        &
+           ncsteps3d                                                           &
            )
     END IF
 
