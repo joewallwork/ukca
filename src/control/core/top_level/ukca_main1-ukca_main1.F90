@@ -2462,6 +2462,25 @@ IF (ukca_config%l_ukca_chem) THEN
            )
     END IF
 
+    ! TODO: Fields to write out via STASH:
+    ! - p_theta_levels
+    ! - t_chem
+    ! - q_chem
+    ! - qcf
+    ! - qcl
+    ! - tracer_in
+    ! - cloud_frac
+    ! - photol_rates
+    ! - grid_volume
+    ! - have_nat3d
+    ! - so4_sa
+    ! - H_plus_3d_arr
+    ! - zdryrt
+    ! - zwetrt
+    ! - co2_interactive
+    ! - L_stratosphere
+    ! - ncsteps3d
+
     ! ASAD post-processing
     IF (.NOT. ukca_config%l_ukca_offline_be) THEN
       CALL ukca_chemistry_cleanup(row_length, rows, model_levels,              &
