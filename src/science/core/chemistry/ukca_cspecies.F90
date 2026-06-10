@@ -184,7 +184,9 @@ USE ukca_constants,  ONLY: c_br, c_brcl, c_bro, c_brono2, c_buoo,              &
     c_txcarb22, c_ru12pan, c_rtn26pan, c_aroh14, c_aroh17, c_arnoh14,          &
     c_arnoh17, c_anhy, c_cri,c_dhpcarb9, c_hpucarb12, c_hucarb9, c_iepox,      &
     c_hmml, c_dhpr12ooh, c_dhcarb9, c_ru12no3, c_ru10no3, c_dhpr12o2,          &
-    c_ru10ao2, c_maco3
+    c_ru10ao2, c_maco3, c_pres, c_temp, c_water_vap, c_qcf, c_qcl,             &
+    c_tracer_in, c_cloud_frac, c_photol_rat, c_grid_vol, c_have_nat3d,         &
+    c_so4_sa, c_h_plus, c_dryrt, c_wetrt, c_co2_int, c_l_strat, c_nsteps
 
 
 USE asad_mod,        ONLY: advt, nadvt, speci, jpctr, jpspec
@@ -545,6 +547,24 @@ WHERE (nadvt == 'RO2       ') c_na_species = c_cri
 WHERE (nadvt == 'DHPR12O2  ') c_na_species = c_dhpr12o2
 WHERE (nadvt == 'RU10AO2   ') c_na_species = c_ru10ao2
 WHERE (nadvt == 'MACO3     ') c_na_species = c_maco3
+! Fields to be outputted for ML training
+WHERE (nadvt == 'PRES      ') c_na_species = c_pres
+WHERE (nadvt == 'TEMP      ') c_na_species = c_temp
+WHERE (nadvt == 'WATER_VAP ') c_na_species = c_water_vap
+WHERE (nadvt == 'QCF       ') c_na_species = c_qcf
+WHERE (nadvt == 'QCL       ') c_na_species = c_qcl
+WHERE (nadvt == 'TRACER_IN ') c_na_species = c_tracer_in
+WHERE (nadvt == 'CLOUD_FRAC') c_na_species = c_cloud_frac
+WHERE (nadvt == 'PHOTOL_RAT') c_na_species = c_photol_rat
+WHERE (nadvt == 'GRID_VOL  ') c_na_species = c_grid_vol
+WHERE (nadvt == 'HAVE_NAT3D') c_na_species = c_have_nat3d
+WHERE (nadvt == 'SO4_SA    ') c_na_species = c_so4_sa
+WHERE (nadvt == 'H_PLUS    ') c_na_species = c_h_plus
+WHERE (nadvt == 'DRYRT     ') c_na_species = c_dryrt
+WHERE (nadvt == 'WETRT     ') c_na_species = c_wetrt
+WHERE (nadvt == 'CO2_INT   ') c_na_species = c_co2_int
+WHERE (nadvt == 'L_STRAT   ') c_na_species = c_l_strat
+WHERE (nadvt == 'NCSTEPS   ') c_na_species = c_nsteps
 
 
 !     Initialise tracer numbers
