@@ -103,7 +103,7 @@ INTEGER, PARAMETER :: rm = 1024   ! Used to remove reactions that existed at
                                   ! later ones
 
 ! Define size of master chemistry
-INTEGER, PARAMETER :: n_chch_master = 357 ! number of known species
+INTEGER, PARAMETER :: n_chch_master = 374 ! number of known species
 INTEGER, PARAMETER :: n_het_master  =  18 ! number of heterogeneous reactions
 INTEGER, PARAMETER :: n_dry_master  = 162 ! number of dry deposition reactions
 INTEGER, PARAMETER :: n_wet_master  = 160 ! number of wet deposition reactions
@@ -919,7 +919,41 @@ chch_t1(282,'RU10NO3   ',1,'TR        ','          ',1,1,cs,0,0,119),          &
 ! 283
 chch_t1(283,'MACO3     ',1,'OO        ','          ',0,0,cs,rp,0,119),         &
 ! 284
-chch_t1(284,'SEC_ORG_I ',1,'TR        ','          ',1,1,st,a,0,132)           &
+chch_t1(284,'SEC_ORG_I ',1,'TR        ','          ',1,1,st,a,0,132),          &
+! 285
+chch_t1(285,'PRES      ',1,'TR        ','          ',0,0,st,0,0,139),          &
+! 286
+chch_t1(286,'TEMP      ',1,'TR        ','          ',0,0,st,0,0,139),          &
+! 287
+chch_t1(287,'WATER_VAP ',1,'TR        ','          ',0,0,st,0,0,139),          &
+! 288
+chch_t1(288,'QCF       ',1,'TR        ','          ',0,0,st,0,0,139),          &
+! 289
+chch_t1(289,'QCL       ',1,'TR        ','          ',0,0,st,0,0,139),          &
+! 290
+chch_t1(290,'TRACER_IN ',1,'TR        ','          ',0,0,st,0,0,139),          &
+! 291
+chch_t1(291,'CLOUD_FRAC',1,'TR        ','          ',0,0,st,0,0,139),          &
+! 292
+chch_t1(292,'PHOTOL_RAT',1,'TR        ','          ',0,0,st,0,0,139),          &
+! 293
+chch_t1(293,'GRID_VOL  ',1,'TR        ','          ',0,0,st,0,0,139),          &
+! 294
+chch_t1(294,'HAVE_NAT3D',1,'TR        ','          ',0,0,st,0,0,139),          &
+! 295
+chch_t1(295,'SO4_SA    ',1,'TR        ','          ',0,0,st,0,0,139),          &
+! 296
+chch_t1(296,'H_PLUS    ',1,'TR        ','          ',0,0,st,0,0,139),          &
+! 297
+chch_t1(297,'DRYRT     ',1,'TR        ','          ',0,0,st,0,0,139),          &
+! 298
+chch_t1(298,'WETRT     ',1,'TR        ','          ',0,0,st,0,0,139),          &
+! 299
+chch_t1(299,'CO2_INT   ',1,'TR        ','          ',0,0,st,0,0,139),          &
+! 300
+chch_t1(300,'L_STRAT   ',1,'TR        ','          ',0,0,st,0,0,139),          &
+! 301
+chch_t1(301,'NCSTEPS   ',1,'TR        ','          ',0,0,st,0,0,139)           &
 ]
 
 
