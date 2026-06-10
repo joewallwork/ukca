@@ -372,6 +372,25 @@ REAL, PARAMETER :: c_maco3      = 3.489
 !                            Same as Sec_org
 REAL, PARAMETER :: c_cri        = 5.1782
 
+! Conversion rates for fields outputted for ML training
+REAL, PARAMETER :: c_pres       = 1.0
+REAL, PARAMETER :: c_temp       = 1.0
+REAL, PARAMETER :: c_water_vap  = 1.0
+REAL, PARAMETER :: c_qcf        = 1.0
+REAL, PARAMETER :: c_qcl        = 1.0
+REAL, PARAMETER :: c_tracer_in  = 1.0
+REAL, PARAMETER :: c_cloud_frac = 1.0
+REAL, PARAMETER :: c_photol_rat = 1.0
+REAL, PARAMETER :: c_grid_vol   = 1.0
+REAL, PARAMETER :: c_have_nat3d = 1.0
+REAL, PARAMETER :: c_so4_sa     = 1.0
+REAL, PARAMETER :: c_h_plus     = 1.0
+REAL, PARAMETER :: c_dryrt      = 1.0
+REAL, PARAMETER :: c_wetrt      = 1.0
+REAL, PARAMETER :: c_co2_int    = 1.0
+REAL, PARAMETER :: c_l_strat    = 1.0
+REAL, PARAMETER :: c_ncsteps    = 1.0
+
 !     molecular masses in g/mol of emitted species,
 !     for budget calculations
 REAL, PARAMETER :: m_ho2     =  33.007
