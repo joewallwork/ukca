@@ -581,6 +581,11 @@ REAL(KIND=jprb)               :: zhook_handle
 TYPE(autotune_type), ALLOCATABLE, SAVE :: autotune_state
 #endif
 
+! Fields to output for ML training
+REAL :: tracer_in(ukca_config%row_length, &
+                  ukca_config%rows, &
+                  ukca_config%model_levels, &
+                  n_chem_tracers+n_aero_tracers)
 INTEGER :: ncsteps3d(ukca_config%row_length, &
                      ukca_config%rows, &
                      ukca_config%model_levels)
@@ -2226,6 +2231,9 @@ IF (ukca_config%l_ukca_chem) THEN
          stashwork50,                                                          &
          l_firstchem                                                           &
          )
+
+    ! Stash tracer concentrations passed as inputs to ASAD
+    tracer_in(:,:,:,:) = all_tracers(:,:,:,1:n_chem_tracers+n_aero_tracers)
 
     IF (ukca_config%l_ukca_offline_be) THEN
 
