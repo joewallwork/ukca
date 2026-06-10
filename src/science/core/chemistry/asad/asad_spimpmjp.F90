@@ -166,10 +166,10 @@ END SUBROUTINE forward_euler
 
 ! *********************************************************************
 
-SUBROUTINE calc_residual_error(n_points,residual_error,G_f,f_min)
+SUBROUTINE calc_residual_error(n_points,residual_error,G_f,f_min,iredo,rtol)
 
 USE asad_mod,            ONLY: jpcspf, nlf
-USE asad_mod,            ONLY: prod, slos
+USE asad_mod,            ONLY: prod, slos, ncsteps_array
 USE yomhook,             ONLY: lhook, dr_hook
 USE parkind1,            ONLY: jprb, jpim
 
@@ -179,6 +179,8 @@ INTEGER, INTENT(IN) :: n_points
 REAL, INTENT(OUT) :: residual_error
 REAL, INTENT(IN) :: G_f(1:n_points,1:jpcspf)
 REAL, INTENT(IN) :: f_min
+INTEGER, INTENT(IN) :: iredo
+REAL, INTENT(IN) :: rtol
 
 REAL :: tmprc(1:n_points,1:jpcspf)
 INTEGER :: jl, jtr, j
@@ -203,6 +205,11 @@ DO jl=1,n_points
     IF (ABS(tmprc(jl,jtr)) > f_min) THEN
       residual_error=MAX(residual_error,ABS(G_f(jl,jtr)/tmprc(jl,jtr)))
     END IF
+
+    ! Record number of halving steps
+    IF ((ABS(tmprc(jl,jtr)) < rtol) .AND. (ncsteps_array(jl) == 0)) THEN
+      ncsteps_array(jl) = iredo
+    END IF
   END DO
 END DO
 
@@ -212,9 +219,9 @@ END SUBROUTINE calc_residual_error
 
 ! *********************************************************************
 
-SUBROUTINE calc_error_norm(n_points,error_norm,f,f_incr,f_min)
+SUBROUTINE calc_error_norm(n_points,error_norm,f,f_incr,f_min,iredo,rtol)
 
-USE asad_mod,            ONLY: jpcspf
+USE asad_mod,            ONLY: jpcspf, ncsteps_array
 USE yomhook,             ONLY: lhook, dr_hook
 USE parkind1,            ONLY: jprb, jpim
 
@@ -225,6 +232,8 @@ REAL, INTENT(OUT)   :: error_norm
 REAL, INTENT(IN)    :: f(1:n_points,1:jpcspf)
 REAL, INTENT(IN)    :: f_incr(1:n_points,1:jpcspf)
 REAL, INTENT(IN)    :: f_min
+INTEGER, INTENT(IN) :: iredo
+REAL, INTENT(IN)    :: rtol
 
 INTEGER :: jl
 INTEGER :: jtr
@@ -241,6 +250,11 @@ DO jtr=1,jpcspf
   DO jl=1,n_points
     IF (ABS(f_incr(jl,jtr)) > 1.0e-16) THEN
       error_norm = MAX(error_norm,ABS(f_incr(jl,jtr)/MAX(f(jl,jtr),f_min)))
+    END IF
+
+    ! Record number of halving steps
+    IF ((ABS(f_incr(jl,jtr)) < rtol) .AND. (ncsteps_array(jl) == 0)) THEN
+      ncsteps_array(jl) = iredo
     END IF
   END DO
 END DO
@@ -279,7 +293,7 @@ INTEGER, INTENT(IN) :: jy
 INTEGER, INTENT(IN) :: nlev
 INTEGER, INTENT(IN) :: location
 INTEGER, INTENT(OUT):: exit_code
-INTEGER, INTENT(OUT):: solver_iter ! No. of iterations
+INTEGER, INTENT(INOUT):: solver_iter ! No. of iterations
 
 ! Local variables
 INTEGER, PARAMETER :: maxneg=2000     ! Max No. negatives allowed
@@ -290,6 +304,7 @@ INTEGER :: ifi
 INTEGER :: i
 INTEGER :: itr
 INTEGER :: count_negatives
+INTEGER :: iredo
 REAL :: ztmp
 ! The maximum concentration allowed was previously f_max = 1.0/f_min
 REAL, PARAMETER :: f_max = 1.0e30
@@ -337,6 +352,9 @@ LOGICAL, SAVE :: first_pass = .TRUE.
 
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
+
+! Pass iredo in from spmjpdriv
+iredo = solver_iter
 
 f_min = SQRT(peps) ! Minimum species concentration
 
@@ -424,7 +442,8 @@ DO iter=1,ukca_config%nrsteps
   G_f = (f - f_initial)*deltt - fdot
 
   ! Calculate residual error (the relative magnitude of G_f)
-  CALL calc_residual_error(n_points,residual_error,G_f,f_min)
+  CALL calc_residual_error(n_points,residual_error,G_f,f_min,iredo, &
+                           RelTol_residual_error)
   IF (residual_error < RelTol_residual_error) THEN
     exit_code = 0 ! Successful exit
     solver_iter = iter
@@ -505,7 +524,7 @@ DO iter=1,ukca_config%nrsteps
 
   !  Filter increments
   f_incr = MIN(MAX(f_incr,-f_max),f_max)
-  CALL calc_error_norm(n_points,error_norm,f,f_incr,f_min)
+  CALL calc_error_norm(n_points,error_norm,f,f_incr,f_min,iredo,RelTol_error)
 
   ! Apply increment f_k+1 = f_k + f_incr
   count_negatives = 0
