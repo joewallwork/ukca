@@ -175,6 +175,7 @@ REAL :: secs_per_step                         ! chemical time step
 REAL :: dpd_dummy(model_levels,jpspec)
 REAL :: dpw_dummy(model_levels,jpspec)
 REAL :: prk_dummy(model_levels,jpnr)
+REAL :: rk_dummy(model_levels,jpnr)
 REAL :: y_dummy(model_levels,jpspec)
 
 ! SO2 increments in molecules/cm^3
@@ -219,6 +220,7 @@ jy=0
 dpd_dummy=0.0
 dpw_dummy=0.0
 prk_dummy=0.0
+rk_dummy=0.0
 y_dummy=0.0
 
 IF (firstcall) THEN
@@ -381,8 +383,8 @@ DO k=1,k_be_top
 
     ! 3D flux diagnostics
     CALL asad_chemical_diagnostics(row_length, rows, model_levels,             &
-    theta_field_size, dpd_dummy, dpw_dummy, prk_dummy, y_dummy, ix, jy, k,     &
-                                   volume, ierr)
+    theta_field_size, dpd_dummy, dpw_dummy, prk_dummy, rk_dummy, y_dummy, ix,  &
+    jy, k, volume, ierr)
 
   END IF    ! lflux
 

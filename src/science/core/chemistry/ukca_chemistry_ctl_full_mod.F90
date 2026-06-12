@@ -433,7 +433,7 @@ IF (L_asad_use_chem_diags .AND.                                                &
   ((L_asad_use_flux_rxns .OR. L_asad_use_rxn_rates) .OR.                       &
   (L_asad_use_wetdep .OR. L_asad_use_drydep))) THEN
   CALL asad_chemical_diagnostics(row_length,rows,model_levels,tot_n_pnts,      &
-    dpd,dpw,prk,y,jy,ix,klevel,volume,ierr)
+    dpd,dpw,prk,rk,y,jy,ix,klevel,volume,ierr)
 END IF
 
 ! PSC diagnostics
