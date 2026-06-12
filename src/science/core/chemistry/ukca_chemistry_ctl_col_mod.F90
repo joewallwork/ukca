@@ -232,6 +232,7 @@ REAL :: dpw_full(model_levels,jpspec)
 REAL :: fpsc1_full(model_levels)
 REAL :: fpsc2_full(model_levels)
 REAL :: prk_full(model_levels,jpnr)
+REAL :: rk_full(model_levels,jpnr)
 REAL :: y_full(model_levels,jpspec)
 
 REAL :: rchet_full(row_length,rows,model_levels,2)
@@ -294,7 +295,7 @@ END IF
 !$OMP         ystore, zclw, zdryrt2, zfcloud, zftr, have_nat1d,                &
 !$OMP         zp, zprt1d, zq, zt, co2_1d, zwetrt2,                             &
 !$OMP         kcs, kce, chunk_size, dpd_full, dpw_full,                        &
-!$OMP         fpsc1_full, fpsc2_full, prk_full, y_full, jspf, jna,             &
+!$OMP         fpsc1_full, fpsc2_full, rk_full, prk_full, y_full, jspf, jna,    &
 !$OMP         H_plus_1d_arr)                                                   &
 !$OMP SHARED(advt, all_ntp, atm_cf2cl2_mol, atm_cfcl3_mol, atm_ch4_mol,        &
 !$OMP        atm_co_mol, atm_h2_mol, atm_mebr_mol, atm_n2o_mol, avogadro,      &
@@ -568,6 +569,7 @@ DO i=1,rows
         fpsc1_full(kcs:kce)=fpsc1(1:chunk_size)
         fpsc2_full(kcs:kce)=fpsc2(1:chunk_size)
         prk_full(kcs:kce,:)=prk(1:chunk_size,:)
+        rk_full(kcs:kce,:)=rk(1:chunk_size,:)
         y_full(kcs:kce,:)=y(1:chunk_size,:)
 
         IF (ukca_config%l_ukca_het_psc) THEN
@@ -744,7 +746,7 @@ DO i=1,rows
          ((L_asad_use_flux_rxns .OR. L_asad_use_rxn_rates) .OR.                &
          (L_asad_use_wetdep .OR. L_asad_use_drydep)))                          &
          CALL asad_chemical_diagnostics(row_length,rows,model_levels,          &
-            model_levels,dpd_full,dpw_full,prk_full,y_full,                    &
+            model_levels,dpd_full,dpw_full,prk_full,rk_full,y_full,            &
             j,i,klevel,volume,ierr)
 
       ! PSC diagnostics
