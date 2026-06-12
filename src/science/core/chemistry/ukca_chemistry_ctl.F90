@@ -193,6 +193,7 @@ LOGICAL :: ddmask(theta_field_size)           ! mask
 REAL :: dpd_dummy(model_levels,jpspec)
 REAL :: dpw_dummy(model_levels,jpspec)
 REAL :: prk_dummy(model_levels,jpnr)
+REAL :: rk_dummy(model_levels,jpnr)
 REAL :: y_dummy(model_levels,jpspec)
 REAL :: fpsc1_dummy(model_levels)
 REAL :: fpsc2_dummy(model_levels)
@@ -228,6 +229,7 @@ dpw_dummy=0.0
 fpsc1_dummy=0.0
 fpsc2_dummy=0.0
 prk_dummy=0.0
+rk_dummy=0.0
 y_dummy=0.0
 
 ! if heterogeneous chemistry is selected, allocate solid HNO3 array
@@ -248,7 +250,7 @@ END DO
 !$OMP SHARED(advt, atm_cf2cl2_mol, atm_cfcl3_mol, atm_ch4_mol,                 &
 !$OMP        atm_co_mol, atm_h2_mol, atm_mebr_mol, atm_n2o_mol, avogadro,      &
 !$OMP        c_species, c_na_species, cloud_frac, cmessage,                    &
-!$OMP        delh2so4_chem, delSO2_wet_H2O2, delSO2_wet_O3,                    &
+!$OMP        delh2so4_chem, delSO2_wet_H2O2, delSO2_wet_O3, rk_dummy,          &
 !$OMP        dpd_dummy, dpw_dummy, fpsc1_dummy, fpsc2_dummy, H_plus,           &
 !$OMP        have_nat, prk_dummy, speci, specf, y_dummy, co2_interactive,      &
 !$OMP        ih2so4_hv, ihso3_h2o2, ihso3_o3, iso2_oh, iso3_o3,                &
@@ -491,7 +493,7 @@ DO k=1,model_levels
        ((L_asad_use_flux_rxns .OR. L_asad_use_rxn_rates) .OR.                  &
        (L_asad_use_wetdep .OR. L_asad_use_drydep)))                            &
        CALL asad_chemical_diagnostics(row_length,rows,model_levels,            &
-       theta_field_size,dpd_dummy,dpw_dummy,prk_dummy,y_dummy,                 &
+       theta_field_size,dpd_dummy,dpw_dummy,prk_dummy,rk_dummy,y_dummy,        &
        ix,jy,k,volume,ierr)
 
   ! PSC diagnostics
