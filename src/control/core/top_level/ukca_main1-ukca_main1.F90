@@ -2479,8 +2479,8 @@ IF (ukca_config%l_ukca_chem) THEN
 
     ! Copy ncsteps3d into STASH work array
     section = UKCA_diag_sect
-    item = 50008
-    CALL copydiag_3d(stashwork(si(item,section,im_index):                      &
+    item = 8
+    CALL copydiag_3d(stashwork50(si(item,section,im_index):                    &
             si_last(item,section,im_index)),                                   &
             ncsteps3d(:,:,:),                                                  &
             row_length, rows, model_levels,                                    &
@@ -2488,8 +2488,8 @@ IF (ukca_config%l_ukca_chem) THEN
             stash_levels, num_stash_levels+1)
 
     ! Copy shno3_3d into STASH work array
-    item = 50009
-    CALL copydiag_3d(stashwork(si(item,section,im_index):                      &
+    item = 9
+    CALL copydiag_3d(stashwork50(si(item,section,im_index):                    &
             si_last(item,section,im_index)),                                   &
             shno3_3d(:,:,:),                                                   &
             row_length, rows, model_levels,                                    &
