@@ -845,7 +845,7 @@ USE netcdf, ONLY: nf90_clobber, nf90_close, nf90_create, nf90_def_dim,         &
 IMPLICIT NONE
 CHARACTER(LEN=*), INTENT(IN) :: variable
 INTEGER, INTENT(IN) :: array(:)
-CHARACTER(LEN=32) :: filename
+CHARACTER(LEN=36) :: filename
 INTEGER(KIND=4) :: ncid, varid, dimids(1), retval, nx
 INTEGER :: errcode
 CHARACTER(LEN=errormessagelength) :: cmessage
@@ -926,7 +926,7 @@ USE netcdf, ONLY: nf90_clobber, nf90_close, nf90_create, nf90_def_dim,         &
 IMPLICIT NONE
 CHARACTER(LEN=*), INTENT(IN) :: variable
 INTEGER, INTENT(IN) :: array(:,:)
-CHARACTER(LEN=32) :: filename
+CHARACTER(LEN=36) :: filename
 INTEGER(KIND=4) :: ncid, varid, dimids(2), retval, nx, ny
 INTEGER :: errcode
 CHARACTER(LEN=errormessagelength) :: cmessage
@@ -1016,7 +1016,7 @@ USE netcdf, ONLY: nf90_clobber, nf90_close, nf90_create, nf90_def_dim,         &
 IMPLICIT NONE
 CHARACTER(LEN=*), INTENT(IN) :: variable
 INTEGER, INTENT(IN) :: array(:,:,:)
-CHARACTER(LEN=32) :: filename
+CHARACTER(LEN=36) :: filename
 INTEGER(KIND=4) :: ncid, varid, dimids(3), retval, nx, ny, nz
 INTEGER :: errcode
 CHARACTER(LEN=errormessagelength) :: cmessage
@@ -1116,7 +1116,7 @@ USE netcdf, ONLY: nf90_clobber, nf90_close, nf90_create, nf90_def_dim,         &
 IMPLICIT NONE
 CHARACTER(LEN=*), INTENT(IN) :: variable
 REAL(dp), INTENT(IN) :: array(:,:)
-CHARACTER(LEN=32) :: filename
+CHARACTER(LEN=36) :: filename
 INTEGER(KIND=4) :: ncid, varid, dimids(2), retval, nx, ny
 INTEGER :: errcode
 CHARACTER(LEN=errormessagelength) :: cmessage
@@ -1207,7 +1207,7 @@ USE netcdf, ONLY: nf90_clobber, nf90_close, nf90_create, nf90_def_dim,         &
 IMPLICIT NONE
 CHARACTER(LEN=*), INTENT(IN) :: variable
 REAL(dp), INTENT(IN) :: array(:,:,:)
-CHARACTER(LEN=32) :: filename
+CHARACTER(LEN=36) :: filename
 INTEGER(KIND=4) :: ncid, varid, dimids(3), retval, nx, ny, nz
 INTEGER :: errcode
 CHARACTER(LEN=errormessagelength) :: cmessage
@@ -1307,7 +1307,7 @@ USE netcdf, ONLY: nf90_clobber, nf90_close, nf90_create, nf90_def_dim,         &
 IMPLICIT NONE
 CHARACTER(LEN=*), INTENT(IN) :: variable
 REAL(dp), INTENT(IN) :: array(:,:,:,:)
-CHARACTER(LEN=32) :: filename
+CHARACTER(LEN=36) :: filename
 INTEGER(KIND=4) :: ncid, varid, dimids(4), retval, nx, ny, nz, ns
 INTEGER :: errcode
 CHARACTER(LEN=errormessagelength) :: cmessage
