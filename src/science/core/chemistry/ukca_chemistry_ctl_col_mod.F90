@@ -71,7 +71,7 @@ USE asad_mod,             ONLY: advt, cdt, ctype,                              &
                                 jppj, jpro2, jpspec, nadvt, nlnaro2, nprkx,    &
                                 o1d_in_ss, o3p_in_ss, prk, rk,                 &
                                 specf, speci, sph2o, sphno3, spro2, tnd, y, za,&
-                                save_inputs, ncsteps_full, spfj_full, bb_full, &
+                                save_inputs, ncsteps_full, bb_full, &
                                 write_nc_int32_2d, write_nc_int32_3d,          &
                                 write_nc_real64_2d, write_nc_real64_3d,        &
                                 write_nc_real64_4d
@@ -762,7 +762,6 @@ IF (ALLOCATED(ystore)) DEALLOCATE(ystore)
 
 IF (save_inputs .AND. ukca_config%ukca_chem_seg_size == 1) THEN
   CALL write_nc_int32_3d("ncsteps", ncsteps_full)
-  CALL write_nc_real64_4d("sparse_jacobian", spfj_full)
   CALL write_nc_real64_4d("rhs", bb_full)
 END IF
 

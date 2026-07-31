@@ -264,7 +264,6 @@ INTEGER, SAVE :: maxfterms     ! maximum number of terms
 INTEGER, SAVE        :: timestep_iter = 0  ! timestepper iteration
 LOGICAL, PARAMETER   :: save_inputs = .TRUE.
 INTEGER, ALLOCATABLE :: ncsteps_full(:,:,:)
-REAL, ALLOCATABLE    :: spfj_full(:,:,:,:)
 REAL, ALLOCATABLE    :: bb_full(:,:,:,:)
 
 !---------------------------------------------------------------------
@@ -587,11 +586,6 @@ IF (method == int_method_NR) THEN
   IF (.NOT. ALLOCATED(fracterms))   ALLOCATE(fracterms(spfjsize_max, maxfterms))
   IF (.NOT. ALLOCATED(base_tracer)) ALLOCATE(base_tracer(spfjsize_max))
   IF (.NOT. ALLOCATED(ffrac))       ALLOCATE(ffrac(spfjsize_max, maxfterms))
-
-  IF (.NOT. ALLOCATED(spfj_full)) THEN
-    ALLOCATE(spfj_full(ukca_config%row_length, ukca_config%rows,               &
-                       ukca_config%model_levels, spfjsize_max))
-  END IF
 END IF
 
 !$OMP END SINGLE
