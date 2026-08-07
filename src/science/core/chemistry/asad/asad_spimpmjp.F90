@@ -166,10 +166,10 @@ END SUBROUTINE forward_euler
 
 ! *********************************************************************
 
-SUBROUTINE calc_residual_error(n_points,residual_error,G_f,f_min,iredo,rtol)
+SUBROUTINE calc_residual_error(n_points,residual_error,G_f,f_min)
 
 USE asad_mod,            ONLY: jpcspf, nlf
-USE asad_mod,            ONLY: prod, slos, ncsteps_array
+USE asad_mod,            ONLY: prod, slos
 USE yomhook,             ONLY: lhook, dr_hook
 USE parkind1,            ONLY: jprb, jpim
 
@@ -179,11 +179,8 @@ INTEGER, INTENT(IN) :: n_points
 REAL, INTENT(OUT) :: residual_error
 REAL, INTENT(IN) :: G_f(1:n_points,1:jpcspf)
 REAL, INTENT(IN) :: f_min
-INTEGER, INTENT(IN) :: iredo
-REAL, INTENT(IN) :: rtol
 
 REAL :: tmprc(1:n_points,1:jpcspf)
-REAL :: ratio
 INTEGER :: jl, jtr, j
 
 INTEGER(KIND=jpim), PARAMETER :: zhook_in  = 0
@@ -204,12 +201,7 @@ residual_error = 0.0
 DO jl=1,n_points
   DO jtr=1,jpcspf
     IF (ABS(tmprc(jl,jtr)) > f_min) THEN
-      ratio = ABS(G_f(jl,jtr)/tmprc(jl,jtr))
-      residual_error=MAX(residual_error,ratio)
-      ! Record number of halving steps
-      IF ((ratio < rtol) .AND. (ncsteps_array(jl) == 0)) THEN
-        ncsteps_array(jl) = iredo
-      END IF
+      residual_error=MAX(residual_error,ABS(G_f(jl,jtr)/tmprc(jl,jtr)))
     END IF
   END DO
 END DO
@@ -220,9 +212,9 @@ END SUBROUTINE calc_residual_error
 
 ! *********************************************************************
 
-SUBROUTINE calc_error_norm(n_points,error_norm,f,f_incr,f_min,iredo,rtol)
+SUBROUTINE calc_error_norm(n_points,error_norm,f,f_incr,f_min)
 
-USE asad_mod,            ONLY: jpcspf, ncsteps_array
+USE asad_mod,            ONLY: jpcspf
 USE yomhook,             ONLY: lhook, dr_hook
 USE parkind1,            ONLY: jprb, jpim
 
@@ -233,13 +225,9 @@ REAL, INTENT(OUT)   :: error_norm
 REAL, INTENT(IN)    :: f(1:n_points,1:jpcspf)
 REAL, INTENT(IN)    :: f_incr(1:n_points,1:jpcspf)
 REAL, INTENT(IN)    :: f_min
-INTEGER, INTENT(IN) :: iredo
-REAL, INTENT(IN)    :: rtol
 
 INTEGER :: jl
 INTEGER :: jtr
-
-REAL :: ratio
 
 INTEGER(KIND=jpim), PARAMETER :: zhook_in  = 0
 INTEGER(KIND=jpim), PARAMETER :: zhook_out = 1
@@ -252,13 +240,7 @@ error_norm = 0.0
 DO jtr=1,jpcspf
   DO jl=1,n_points
     IF (ABS(f_incr(jl,jtr)) > 1.0e-16) THEN
-      ratio = ABS(f_incr(jl,jtr)/MAX(f(jl,jtr),f_min))
-      error_norm = MAX(error_norm, ratio)
-
-      ! Record number of halving steps
-      IF ((ratio < rtol) .AND. (ncsteps_array(jl) == 0)) THEN
-        ncsteps_array(jl) = iredo
-      END IF
+      error_norm = MAX(error_norm,ABS(f_incr(jl,jtr)/MAX(f(jl,jtr),f_min)))
     END IF
   END DO
 END DO
@@ -433,6 +415,7 @@ DO iter=1,ukca_config%nrsteps
   IF (error_norm < RelTol_error) THEN
     exit_code = 0           ! Successful exit
     solver_iter = iter - 1  ! Technically converged on previous iteration
+    ncsteps_array(:) = iredo ! Stash ncsteps
     GO TO 9999
   END IF
 
@@ -446,11 +429,11 @@ DO iter=1,ukca_config%nrsteps
   G_f = (f - f_initial)*deltt - fdot
 
   ! Calculate residual error (the relative magnitude of G_f)
-  CALL calc_residual_error(n_points,residual_error,G_f,f_min,iredo, &
-                           RelTol_residual_error)
+  CALL calc_residual_error(n_points,residual_error,G_f,f_min)
   IF (residual_error < RelTol_residual_error) THEN
     exit_code = 0 ! Successful exit
     solver_iter = iter
+    ncsteps_array(:) = iredo ! Stash ncsteps
     GO TO 9999
   END IF
 
@@ -528,7 +511,7 @@ DO iter=1,ukca_config%nrsteps
 
   !  Filter increments
   f_incr = MIN(MAX(f_incr,-f_max),f_max)
-  CALL calc_error_norm(n_points,error_norm,f,f_incr,f_min,iredo,RelTol_error)
+  CALL calc_error_norm(n_points,error_norm,f,f_incr,f_min)
 
   ! Apply increment f_k+1 = f_k + f_incr
   count_negatives = 0
