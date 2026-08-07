@@ -2483,7 +2483,7 @@ IF (ukca_config%l_ukca_chem) THEN
     ! - shno3_3d        (50008)
     ! - ncsteps3d       (50009)
     ! - rk_full         (WIP - TODO STASH code)
-    ! - rhs3d           (TODO)
+    ! - rhs3d           (50911-50997)
 
     ! Copy ncsteps3d into STASH work array
     section = UKCA_diag_sect
@@ -2505,14 +2505,15 @@ IF (ukca_config%l_ukca_chem) THEN
             stash_levels, num_stash_levels+1)
 
     ! Copy rhs3d into STASH work array
-    ! TODO: Need 87 such fields
-    item = 10
-    CALL copydiag_3d(stashwork50(si(item,section,im_index):                    &
-            si_last(item,section,im_index)),                                   &
-            rhs3d(:,:,:,1),                                                    &
-            row_length, rows, model_levels,                                    &
-            stlist(:,stindex(1,item,section,im_index)), len_stlist,            &
-            stash_levels, num_stash_levels+1)
+    DO i = 1, jpspec
+      item = 910 + i
+      CALL copydiag_3d(stashwork50(si(item,section,im_index):                  &
+              si_last(item,section,im_index)),                                 &
+              rhs3d(:,:,:,i),                                                  &
+              row_length, rows, model_levels,                                  &
+              stlist(:,stindex(1,item,section,im_index)), len_stlist,          &
+              stash_levels, num_stash_levels+1)
+    END DO
 
     ! ASAD post-processing
     IF (.NOT. ukca_config%l_ukca_offline_be) THEN
