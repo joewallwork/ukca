@@ -166,7 +166,7 @@ LOGICAL, INTENT(IN) :: L_stratosphere(tot_n_pnts)
 LOGICAL, INTENT(IN) :: firstcall
 
 ! Array of numbers of chemistry timesteps in each grid-box
-INTEGER, INTENT(OUT) :: ncsteps3d(tot_n_pnts)
+REAL, INTENT(OUT) :: ncsteps3d(tot_n_pnts)
 
 ! Local variables
 INTEGER :: ix            ! dummy variable
@@ -526,7 +526,9 @@ END DO ! End loop through species in zftr array
 !$OMP END PARALLEL
 
 ! Store ncsteps in full 3D array
-ncsteps3d(:) = ncsteps_array
+DO k = 1, tot_n_pnts
+  ncsteps3d(k) = REAL(ncsteps_array(k))
+END DO
 
 IF (ALLOCATED(ystore)) DEALLOCATE(ystore)
 

@@ -163,7 +163,7 @@ LOGICAL, INTENT(IN) :: L_stratosphere(tot_n_pnts)
 LOGICAL, INTENT(IN) :: firstcall
 
 ! Array of numbers of chemistry timesteps in each grid-box
-INTEGER, INTENT(OUT) :: ncsteps3d(theta_field_size,model_levels)
+REAL, INTENT(OUT) :: ncsteps3d(theta_field_size,model_levels)
 
 ! Local variables
 INTEGER :: ix            ! dummy variable
@@ -609,7 +609,9 @@ DO k=1,model_levels
   END DO ! End loop through species in zftr array
 
   ! Store ncsteps in full 3D array
-  ncsteps3d(:,k) = ncsteps_array
+  DO i = 1, theta_field_size
+    ncsteps3d(i,k) = REAL(ncsteps_array(i))
+  END DO
 
 END DO ! level loop (k)
 !$OMP END DO

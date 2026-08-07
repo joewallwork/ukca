@@ -180,7 +180,7 @@ TYPE(ntp_type), INTENT(IN OUT) :: all_ntp(dim_ntp)
 LOGICAL, INTENT(IN) :: have_nat3d(row_length,rows,model_levels)
 
 ! Array of numbers of chemistry timesteps in each grid-box
-INTEGER, INTENT(OUT) :: ncsteps3d(row_length,rows,model_levels)
+REAL, INTENT(OUT) :: ncsteps3d(row_length,rows,model_levels)
 
 ! Local variables
 INTEGER :: i             ! Loop variable
@@ -692,7 +692,11 @@ DO i=1,rows
         END DO ! End loop through species in zftr array
 
         ! Store ncsteps in full 3D array
-        ncsteps3d(j,i,kcs:kce) = ncsteps_array
+        l = 0
+        DO k = kcs, kce
+          l = l + 1
+          ncsteps3d(j,i,k) = REAL(ncsteps_array(l))
+        END DO
 
       END DO ! end chunking loop
 

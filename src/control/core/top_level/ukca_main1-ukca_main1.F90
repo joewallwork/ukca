@@ -581,9 +581,9 @@ REAL(KIND=jprb)               :: zhook_handle
 TYPE(autotune_type), ALLOCATABLE, SAVE :: autotune_state
 #endif
 
-INTEGER :: ncsteps3d(ukca_config%row_length, &
-                     ukca_config%rows, &
-                     ukca_config%model_levels)
+REAL :: ncsteps3d(ukca_config%row_length, &
+                  ukca_config%rows, &
+                  ukca_config%model_levels)
 
 CHARACTER(LEN=*), PARAMETER :: RoutineName='UKCA_MAIN1'
 
