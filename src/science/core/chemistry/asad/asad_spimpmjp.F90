@@ -256,7 +256,8 @@ SUBROUTINE asad_spimpmjp(exit_code, ix, jy, nlev, n_points, location,          &
 
 USE asad_mod,           ONLY: ptol, peps, cdt, f, fdot, nitnr, nstst, y,       &
                               fj, nonzero_map, ltrig, jpcspf, spfj,            &
-                              modified_map, nonzero_map_unordered
+                              modified_map, nonzero_map_unordered,             &
+                              ncsteps_stashed
 USE asad_sparse_vars,   ONLY: setup_spfuljac, spfuljac, spresolv2, splinslv2
 USE ukca_config_specification_mod, ONLY: ukca_config
 USE yomhook,            ONLY: lhook, dr_hook
@@ -415,7 +416,9 @@ DO iter=1,ukca_config%nrsteps
   IF (error_norm < RelTol_error) THEN
     exit_code = 0           ! Successful exit
     solver_iter = iter - 1  ! Technically converged on previous iteration
-    ncsteps_array(:) = iredo ! Stash ncsteps
+    ! Stash ncsteps
+    ! NOTE: This is only strictly the right number if ukca_chem_seg_size=1
+    ncsteps_stashed = iredo
     GO TO 9999
   END IF
 
@@ -433,7 +436,9 @@ DO iter=1,ukca_config%nrsteps
   IF (residual_error < RelTol_residual_error) THEN
     exit_code = 0 ! Successful exit
     solver_iter = iter
-    ncsteps_array(:) = iredo ! Stash ncsteps
+    ! Stash ncsteps
+    ! NOTE: This is only strictly the right number if ukca_chem_seg_size=1
+    ncsteps_stashed = iredo
     GO TO 9999
   END IF
 

@@ -72,7 +72,7 @@ USE asad_mod,             ONLY: advt, cdt, ctype,                              &
                                 jppj, jpro2, jpspec, nadvt, nlnaro2, nprkx,    &
                                 o1d_in_ss, o3p_in_ss, rk,                      &
                                 specf, speci, sph2o, sphno3, spro2, tnd, za,   &
-                                dpd, dpw, prk, y, fpsc1, fpsc2, ncsteps_array
+                                dpd, dpw, prk, y, fpsc1, fpsc2, ncsteps_stashed
 USE asad_cdrive_mod,      ONLY: asad_cdrive
 USE asad_chem_flux_diags, ONLY: l_asad_use_chem_diags,                         &
                                 l_asad_use_drydep,                             &
@@ -526,9 +526,7 @@ END DO ! End loop through species in zftr array
 !$OMP END PARALLEL
 
 ! Store ncsteps in full 3D array
-DO k = 1, tot_n_pnts
-  ncsteps3d(k) = REAL(ncsteps_array(k))
-END DO
+ncsteps3d(:) = ncsteps_stashed
 
 IF (ALLOCATED(ystore)) DEALLOCATE(ystore)
 

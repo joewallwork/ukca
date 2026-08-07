@@ -65,7 +65,7 @@ SUBROUTINE ukca_chemistry_ctl_col(                                             &
                 ncsteps3d                                                      &
                 )
 
-USE asad_mod,             ONLY: advt, cdt, ctype, ncsteps_array,               &
+USE asad_mod,             ONLY: advt, cdt, ctype, ncsteps_stashed,             &
                                 dpd, dpw, fpsc1, fpsc2,                        &
                                 ihso3_h2o2, ihso3_o3, ih2so4_hv, iso2_oh,      &
                                 iso3_o3, jpctr, jpcspf, jpdd, jpdw, jpnr,      &
@@ -692,11 +692,7 @@ DO i=1,rows
         END DO ! End loop through species in zftr array
 
         ! Store ncsteps in full 3D array
-        l = 0
-        DO k = kcs, kce
-          l = l + 1
-          ncsteps3d(j,i,k) = REAL(ncsteps_array(l))
-        END DO
+        ncsteps3d(j,i,kcs:kce) = ncsteps_stashed
 
       END DO ! end chunking loop
 

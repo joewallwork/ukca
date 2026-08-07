@@ -101,7 +101,7 @@ USE asad_mod,        ONLY: cdt, ctype, fdot, f,                                &
                            madvtr, method, moffam,                             &
                            ncsteps, ndepd, ndepw,                              &
                            nfphot, nit0, nitfg, nodd,                          &
-                           p, t, tnd, wp, co2, ncsteps_array
+                           p, t, tnd, wp, co2, ncsteps_stashed
 USE ukca_hetero_mod, ONLY: ukca_hetero, ukca_solidphase
 USE ukca_config_specification_mod, ONLY: ukca_config
 
@@ -186,8 +186,8 @@ CHARACTER(LEN=*), PARAMETER :: RoutineName='ASAD_CDRIVE'
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
 
-! Set ncsteps_array to zero at the start of the ASAD call
-ncsteps_array(:) = 0
+! Set ncsteps_stashed to zero at the start of the ASAD call
+ncsteps_stashed = 0
 
 
 !       1.  Initialise variables and arrays

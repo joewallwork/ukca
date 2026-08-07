@@ -351,7 +351,7 @@ LOGICAL :: ljacx
 ! shared between asad_spimpmjp and asad_spmjpdriv
 LOGICAL :: ltrig
 
-INTEGER, ALLOCATABLE, DIMENSION(:) :: ncsteps_array
+INTEGER :: ncsteps_stashed
 
 CHARACTER(LEN=*), PARAMETER, PRIVATE :: ModuleName='ASAD_MOD'
 
@@ -615,7 +615,6 @@ IF (.NOT. ALLOCATED(co2)) ALLOCATE(co2(n_points))
 IF (.NOT. ALLOCATED(y)) ALLOCATE(y(n_points,jpspec))
 IF (.NOT. ALLOCATED(ydot)) ALLOCATE(ydot(n_points,jpspec))
 IF (.NOT. ALLOCATED(za)) ALLOCATE(za(n_points))
-IF (.NOT. ALLOCATED(ncsteps_array)) ALLOCATE(ncsteps_array(n_points))
 IF (.NOT. ALLOCATED(shno3)) ALLOCATE(shno3(n_points))
 
 IF (method == int_method_NR) THEN
@@ -695,7 +694,6 @@ IF (.NOT. ALLOCATED(co2)) ALLOCATE(co2(n_points))
 IF (.NOT. ALLOCATED(y)) ALLOCATE(y(n_points,jpspec))
 IF (.NOT. ALLOCATED(ydot)) ALLOCATE(ydot(n_points,jpspec))
 IF (.NOT. ALLOCATED(za)) ALLOCATE(za(n_points))
-IF (.NOT. ALLOCATED(ncsteps_array)) ALLOCATE(ncsteps_array(n_points))
 
 IF (method == int_method_NR) THEN
   IF (.NOT. ALLOCATED(spfj))  ALLOCATE(spfj(n_points,spfjsize_max))
@@ -815,7 +813,6 @@ IF (ALLOCATED(dpd)) DEALLOCATE(dpd)
 IF (ALLOCATED(deriv)) DEALLOCATE(deriv)
 IF (ALLOCATED(co3)) DEALLOCATE(co3)
 IF (ALLOCATED(pd)) DEALLOCATE(pd)
-IF (ALLOCATED(ncsteps_array)) DEALLOCATE(ncsteps_array)
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
 
