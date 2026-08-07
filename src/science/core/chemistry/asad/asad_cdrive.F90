@@ -101,7 +101,7 @@ USE asad_mod,        ONLY: cdt, ctype, fdot, f,                                &
                            madvtr, method, moffam,                             &
                            ncsteps, ndepd, ndepw,                              &
                            nfphot, nit0, nitfg, nodd,                          &
-                           p, t, tnd, wp, co2
+                           p, t, tnd, wp, co2, ncsteps_array
 USE ukca_hetero_mod, ONLY: ukca_hetero, ukca_solidphase
 USE ukca_config_specification_mod, ONLY: ukca_config
 
@@ -184,13 +184,17 @@ REAL(KIND=jprb)               :: zhook_handle
 
 CHARACTER(LEN=*), PARAMETER :: RoutineName='ASAD_CDRIVE'
 
+IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
+
+! Set ncsteps_array to zero at the start of the ASAD call
+ncsteps_array(:) = 0
+
 
 !       1.  Initialise variables and arrays
 
 !       1.1   Clear tendencies to avoid contributions from levels
 !             on which no chemistry is performed
 
-IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
 DO jtr = 1, jpcspf
   DO jl = 1, n_points
     cdot(jl,jtr) = 0.0
