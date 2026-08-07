@@ -2482,7 +2482,7 @@ IF (ukca_config%l_ukca_chem) THEN
     item = 8
     CALL copydiag_3d(stashwork50(si(item,section,im_index):                    &
             si_last(item,section,im_index)),                                   &
-            ncsteps3d(:,:,:),                                                  &
+            shno3_3d(:,:,:),                                                   &
             row_length, rows, model_levels,                                    &
             stlist(:,stindex(1,item,section,im_index)), len_stlist,            &
             stash_levels, num_stash_levels+1)
@@ -2491,7 +2491,7 @@ IF (ukca_config%l_ukca_chem) THEN
     item = 9
     CALL copydiag_3d(stashwork50(si(item,section,im_index):                    &
             si_last(item,section,im_index)),                                   &
-            shno3_3d(:,:,:),                                                   &
+            ncsteps3d(:,:,:),                                                  &
             row_length, rows, model_levels,                                    &
             stlist(:,stindex(1,item,section,im_index)), len_stlist,            &
             stash_levels, num_stash_levels+1)
