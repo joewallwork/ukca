@@ -183,6 +183,7 @@ INTEGER, INTENT(IN) :: iredo
 REAL, INTENT(IN) :: rtol
 
 REAL :: tmprc(1:n_points,1:jpcspf)
+REAL :: ratio
 INTEGER :: jl, jtr, j
 
 INTEGER(KIND=jpim), PARAMETER :: zhook_in  = 0
@@ -203,12 +204,12 @@ residual_error = 0.0
 DO jl=1,n_points
   DO jtr=1,jpcspf
     IF (ABS(tmprc(jl,jtr)) > f_min) THEN
-      residual_error=MAX(residual_error,ABS(G_f(jl,jtr)/tmprc(jl,jtr)))
-    END IF
-
-    ! Record number of halving steps
-    IF ((ABS(tmprc(jl,jtr)) < rtol) .AND. (ncsteps_array(jl) == 0)) THEN
-      ncsteps_array(jl) = iredo
+      ratio = ABS(G_f(jl,jtr)/tmprc(jl,jtr))
+      residual_error=MAX(residual_error,ratio)
+      ! Record number of halving steps
+      IF ((ratio < rtol) .AND. (ncsteps_array(jl) == 0)) THEN
+        ncsteps_array(jl) = iredo
+      END IF
     END IF
   END DO
 END DO
@@ -238,6 +239,8 @@ REAL, INTENT(IN)    :: rtol
 INTEGER :: jl
 INTEGER :: jtr
 
+REAL :: ratio
+
 INTEGER(KIND=jpim), PARAMETER :: zhook_in  = 0
 INTEGER(KIND=jpim), PARAMETER :: zhook_out = 1
 REAL(KIND=jprb)               :: zhook_handle
@@ -249,12 +252,13 @@ error_norm = 0.0
 DO jtr=1,jpcspf
   DO jl=1,n_points
     IF (ABS(f_incr(jl,jtr)) > 1.0e-16) THEN
-      error_norm = MAX(error_norm,ABS(f_incr(jl,jtr)/MAX(f(jl,jtr),f_min)))
-    END IF
+      ratio = ABS(f_incr(jl,jtr)/MAX(f(jl,jtr),f_min))
+      error_norm = MAX(error_norm, ratio)
 
-    ! Record number of halving steps
-    IF ((ABS(f_incr(jl,jtr)) < rtol) .AND. (ncsteps_array(jl) == 0)) THEN
-      ncsteps_array(jl) = iredo
+      ! Record number of halving steps
+      IF ((ratio < rtol) .AND. (ncsteps_array(jl) == 0)) THEN
+        ncsteps_array(jl) = iredo
+      END IF
     END IF
   END DO
 END DO
