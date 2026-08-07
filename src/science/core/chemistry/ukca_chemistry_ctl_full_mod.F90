@@ -63,14 +63,15 @@ SUBROUTINE ukca_chemistry_ctl_full(                                            &
                 H_plus,                                                        &
                 zdryrt, zwetrt, nlev_with_ddep, L_stratosphere,                &
                 co2_interactive, firstcall,                                    &
-                ncsteps3d                                                      &
+                ncsteps3d,                                                     &
+                rhs3d                                                          &
                 )
 
 USE asad_mod,             ONLY: advt, cdt, ctype,                              &
                                 ihso3_h2o2, ihso3_o3, ih2so4_hv, iso2_oh,      &
                                 iso3_o3, jpctr, jpcspf, jpdd, jpdw, jpnr,      &
                                 jppj, jpro2, jpspec, nadvt, nlnaro2, nprkx,    &
-                                o1d_in_ss, o3p_in_ss, rk,                      &
+                                o1d_in_ss, o3p_in_ss, rk, rhs,                 &
                                 specf, speci, sph2o, sphno3, spro2, tnd, za,   &
                                 dpd, dpw, prk, y, fpsc1, fpsc2, ncsteps_stashed
 USE asad_cdrive_mod,      ONLY: asad_cdrive
@@ -167,6 +168,9 @@ LOGICAL, INTENT(IN) :: firstcall
 
 ! Array of numbers of chemistry timesteps in each grid-box
 REAL, INTENT(OUT) :: ncsteps3d(tot_n_pnts)
+
+! Linear system RHS in each grid-box
+REAL, INTENT(OUT) :: rhs3d(tot_n_pnts,jpspec)
 
 ! Local variables
 INTEGER :: ix            ! dummy variable
@@ -525,8 +529,9 @@ END DO ! End loop through species in zftr array
 !$OMP END DO
 !$OMP END PARALLEL
 
-! Store ncsteps in full 3D array
+! Store ncsteps and rhs in full 3D arrays
 ncsteps3d(:) = ncsteps_stashed
+rhs3d(:,:) = rhs
 
 IF (ALLOCATED(ystore)) DEALLOCATE(ystore)
 

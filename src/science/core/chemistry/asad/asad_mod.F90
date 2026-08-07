@@ -352,6 +352,7 @@ LOGICAL :: ljacx
 LOGICAL :: ltrig
 
 INTEGER :: ncsteps_stashed
+REAL, ALLOCATABLE :: rhs(:,:)              ! RHS of linear system
 
 CHARACTER(LEN=*), PARAMETER, PRIVATE :: ModuleName='ASAD_MOD'
 
@@ -360,10 +361,10 @@ CHARACTER(LEN=*), PARAMETER, PRIVATE :: ModuleName='ASAD_MOD'
 !$OMP               f, fdot, fj, fpsc1, fpsc2, ftilde,                         &
 !$OMP               interval, ipa, jsubs,                                      &
 !$OMP               lati, linfam, ltrig, modified_map,                         &
-!$OMP               ncsteps, p, pd, pmintnd, prk, prod,                        &
+!$OMP               ncsteps, ncsteps_stashed, p, pd, pmintnd, prk, prod,       &
 !$OMP               qa, ratio, rk,                                             &
 !$OMP               sh2o, shno3, slos, spfj, sph2o, sphno3,                    &
-!$OMP               t, t300, tnd, wp, co2, y, ydot, za)
+!$OMP               t, t300, tnd, wp, co2, y, ydot, za, rhs)
 
 CONTAINS
 
@@ -616,6 +617,7 @@ IF (.NOT. ALLOCATED(y)) ALLOCATE(y(n_points,jpspec))
 IF (.NOT. ALLOCATED(ydot)) ALLOCATE(ydot(n_points,jpspec))
 IF (.NOT. ALLOCATED(za)) ALLOCATE(za(n_points))
 IF (.NOT. ALLOCATED(shno3)) ALLOCATE(shno3(n_points))
+IF (.NOT. ALLOCATED(rhs)) ALLOCATE(rhs(n_points,jpspec))
 
 IF (method == int_method_NR) THEN
   IF (.NOT. ALLOCATED(modified_map))  ALLOCATE(modified_map(jpcspf, jpcspf))
@@ -694,6 +696,7 @@ IF (.NOT. ALLOCATED(co2)) ALLOCATE(co2(n_points))
 IF (.NOT. ALLOCATED(y)) ALLOCATE(y(n_points,jpspec))
 IF (.NOT. ALLOCATED(ydot)) ALLOCATE(ydot(n_points,jpspec))
 IF (.NOT. ALLOCATED(za)) ALLOCATE(za(n_points))
+IF (.NOT. ALLOCATED(rhs)) ALLOCATE(rhs(n_points,jpspec))
 
 IF (method == int_method_NR) THEN
   IF (.NOT. ALLOCATED(spfj))  ALLOCATE(spfj(n_points,spfjsize_max))
@@ -742,6 +745,7 @@ wp(:)     = 0.0
 y(:,:)    = 0.0
 ydot(:,:) = 0.0
 za(:)     = 0.0
+rhs(:,:)  = 0.0
 
 !     Clear the rates and index arrays
 rk(:,:)   = 0.0
@@ -779,6 +783,7 @@ IF (method == int_method_NR) THEN ! sparse_vars
   IF (ALLOCATED(spfj)) DEALLOCATE(spfj)
 END IF
 
+IF (ALLOCATED(rhs)) DEALLOCATE(rhs)
 IF (ALLOCATED(za)) DEALLOCATE(za)
 IF (ALLOCATED(ydot)) DEALLOCATE(ydot)
 IF (ALLOCATED(y)) DEALLOCATE(y)

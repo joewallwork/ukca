@@ -62,7 +62,8 @@ SUBROUTINE ukca_chemistry_ctl_col(                                             &
                 atm_h2_mol,                                                    &
                 H_plus_3d_arr,                                                 &
                 zdryrt, zwetrt, nlev_with_ddep,                                &
-                ncsteps3d                                                      &
+                ncsteps3d,                                                     &
+                rhs3d                                                          &
                 )
 
 USE asad_mod,             ONLY: advt, cdt, ctype, ncsteps_stashed,             &
@@ -70,7 +71,7 @@ USE asad_mod,             ONLY: advt, cdt, ctype, ncsteps_stashed,             &
                                 ihso3_h2o2, ihso3_o3, ih2so4_hv, iso2_oh,      &
                                 iso3_o3, jpctr, jpcspf, jpdd, jpdw, jpnr,      &
                                 jppj, jpro2, jpspec, nadvt, nlnaro2, nprkx,    &
-                                o1d_in_ss, o3p_in_ss, prk, rk,                 &
+                                o1d_in_ss, o3p_in_ss, prk, rk, rhs,            &
                                 specf, speci, sph2o, sphno3, spro2, tnd, y, za
 USE asad_chem_flux_diags, ONLY: l_asad_use_chem_diags,                         &
                                 l_asad_use_drydep,                             &
@@ -181,6 +182,9 @@ LOGICAL, INTENT(IN) :: have_nat3d(row_length,rows,model_levels)
 
 ! Array of numbers of chemistry timesteps in each grid-box
 REAL, INTENT(OUT) :: ncsteps3d(row_length,rows,model_levels)
+
+! Linear system RHS in each grid-box
+REAL, INTENT(OUT) :: rhs3d(row_length,rows,model_levels,jpspec)
 
 ! Local variables
 INTEGER :: i             ! Loop variable
@@ -691,8 +695,9 @@ DO i=1,rows
 
         END DO ! End loop through species in zftr array
 
-        ! Store ncsteps in full 3D array
+        ! Store ncsteps and rhs in full 3D arrays
         ncsteps3d(j,i,kcs:kce) = ncsteps_stashed
+        rhs3d(j,i,kcs:kce,:) = rhs
 
       END DO ! end chunking loop
 

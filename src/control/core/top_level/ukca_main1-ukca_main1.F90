@@ -584,6 +584,10 @@ TYPE(autotune_type), ALLOCATABLE, SAVE :: autotune_state
 REAL :: ncsteps3d(ukca_config%row_length, &
                   ukca_config%rows, &
                   ukca_config%model_levels)
+REAL :: rhs3d(ukca_config%row_length, &
+              ukca_config%rows, &
+              ukca_config%model_levels, &
+              jpspec)
 
 CHARACTER(LEN=*), PARAMETER :: RoutineName='UKCA_MAIN1'
 
@@ -2379,7 +2383,8 @@ IF (ukca_config%l_ukca_chem) THEN
            H_plus_3d_arr,                                                      &
            zdryrt, zwetrt, nlev_with_ddep, L_stratosphere, co2_interactive,    &
            l_firstchem,                                                        &
-           ncsteps3d                                                           &
+           ncsteps3d,                                                          &
+           rhs3d                                                               &
            )
 
     ELSE IF (ukca_config%l_ukca_asad_columns) THEN
@@ -2417,7 +2422,8 @@ IF (ukca_config%l_ukca_chem) THEN
            atm_h2_mol,                                                         &
            H_plus_3d_arr,                                                      &
            zdryrt, zwetrt, nlev_with_ddep,                                     &
-           ncsteps3d                                                           &
+           ncsteps3d,                                                          &
+           rhs3d                                                               &
            )
 
     ELSE
@@ -2455,7 +2461,8 @@ IF (ukca_config%l_ukca_chem) THEN
            H_plus_3d_arr,                                                      &
            zdryrt, zwetrt, nlev_with_ddep, co2_interactive, L_stratosphere,    &
            l_firstchem,                                                        &
-           ncsteps3d                                                           &
+           ncsteps3d,                                                          &
+           rhs3d                                                               &
            )
     END IF
 
@@ -2476,7 +2483,7 @@ IF (ukca_config%l_ukca_chem) THEN
     ! - shno3_3d        (50008)
     ! - ncsteps3d       (50009)
     ! - rk_full         (WIP - TODO STASH code)
-    ! - rhs             (TODO)
+    ! - rhs3d           (TODO)
 
     ! Copy ncsteps3d into STASH work array
     section = UKCA_diag_sect
@@ -2493,6 +2500,16 @@ IF (ukca_config%l_ukca_chem) THEN
     CALL copydiag_3d(stashwork50(si(item,section,im_index):                    &
             si_last(item,section,im_index)),                                   &
             ncsteps3d(:,:,:),                                                  &
+            row_length, rows, model_levels,                                    &
+            stlist(:,stindex(1,item,section,im_index)), len_stlist,            &
+            stash_levels, num_stash_levels+1)
+
+    ! Copy rhs3d into STASH work array
+    ! TODO: Need 87 such fields
+    item = 10
+    CALL copydiag_3d(stashwork50(si(item,section,im_index):                    &
+            si_last(item,section,im_index)),                                   &
+            rhs3d(:,:,:,1),                                                    &
             row_length, rows, model_levels,                                    &
             stlist(:,stindex(1,item,section,im_index)), len_stlist,            &
             stash_levels, num_stash_levels+1)

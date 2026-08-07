@@ -63,10 +63,11 @@ SUBROUTINE ukca_chemistry_ctl(                                                 &
                 H_plus,                                                        &
                 zdryrt, zwetrt, nlev_with_ddep, co2_interactive,               &
                 L_stratosphere, firstcall,                                     &
-                ncsteps3d                                                      &
+                ncsteps3d,                                                     &
+                rhs3d                                                          &
                 )
 
-USE asad_mod,             ONLY: advt, cdt, ctype,                              &
+USE asad_mod,             ONLY: advt, cdt, ctype, rhs,                         &
                                 ihso3_h2o2, ihso3_o3, ih2so4_hv, iso2_oh,      &
                                 iso3_o3, jpctr, jpcspf, jpdd, jpdw, jpnr,      &
                                 jppj, jpro2, jpspec, nadvt, nlnaro2, nprkx,    &
@@ -164,6 +165,9 @@ LOGICAL, INTENT(IN) :: firstcall
 
 ! Array of numbers of chemistry timesteps in each grid-box
 REAL, INTENT(OUT) :: ncsteps3d(theta_field_size,model_levels)
+
+! Linear system RHS in each grid-box
+REAL, INTENT(OUT) :: rhs3d(theta_field_size,model_levels,jpspec)
 
 ! Local variables
 INTEGER :: ix            ! dummy variable
@@ -608,8 +612,9 @@ DO k=1,model_levels
 
   END DO ! End loop through species in zftr array
 
-  ! Store ncsteps in full 3D array
+  ! Store ncsteps and rhs in full 3D arrays
   ncsteps3d(:,k) = ncsteps_stashed
+  rhs3d(:,k,:) = rhs
 
 END DO ! level loop (k)
 !$OMP END DO
