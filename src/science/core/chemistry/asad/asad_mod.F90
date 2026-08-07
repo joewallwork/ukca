@@ -630,8 +630,6 @@ slos => pd(:,jpspec+1:2*jpspec)
 deriv(:,:,:) = 1.0      ! Temp fix for deriv being uninitialised in first
                         ! solver iteration
 
-ncsteps_array(:) = 0
-
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
 RETURN
 END SUBROUTINE asad_mod_init
@@ -750,8 +748,6 @@ za(:)     = 0.0
 !     Clear the rates and index arrays
 rk(:,:)   = 0.0
 prk(:,:)  = 0.0
-
-ncsteps_array(:) = 0
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
 RETURN
