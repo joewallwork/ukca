@@ -2466,24 +2466,19 @@ IF (ukca_config%l_ukca_chem) THEN
            )
     END IF
 
-    ! TODO: Fields to write out via STASH:
+    ! Fields to write out via STASH:
     ! - p_theta_levels  (already handled - TODO STASH code)
     ! - t_chem          (already handled - TODO STASH code)
     ! - q_chem          (already handled - TODO STASH code)
     ! - qcf             (already handled - TODO STASH code)
     ! - qcl             (already handled - TODO STASH code)
-    ! - tracer_in       (already handled - TODO STASH code)
+    ! - tracer_in       (TODO handle 50501-50587)
     ! - cloud_frac      (already handled - TODO STASH code)
-    ! - photol_rates    (already handled - TODO STASH code)
     ! - so4_sa          (already handled - TODO STASH code)
     ! - zdryrt          (already handled - TODO STASH code)
-    ! - zwetrt          (already handled - TODO STASH code)
     ! - co2_interactive (already handled - TODO STASH code)
     ! - L_stratosphere  (already handled - TODO STASH code)
-    ! - shno3_3d        (50008)
-    ! - ncsteps3d       (50009)
     ! - rk_full         (WIP - TODO STASH code)
-    ! - rhs3d           (50911-50997)
 
     ! Copy ncsteps3d into STASH work array
     section = UKCA_diag_sect
@@ -2503,6 +2498,28 @@ IF (ukca_config%l_ukca_chem) THEN
             row_length, rows, model_levels,                                    &
             stlist(:,stindex(1,item,section,im_index)), len_stlist,            &
             stash_levels, num_stash_levels+1)
+
+    ! Copy zwetrt into STASH work array
+    DO i = 1, jpdw
+      item = 260 + i
+      CALL copydiag_3d(stashwork50(si(item,section,im_index):                  &
+              si_last(item,section,im_index)),                                 &
+              zwetrt(:,:,:,i),                                                 &
+              row_length, rows, model_levels,                                  &
+              stlist(:,stindex(1,item,section,im_index)), len_stlist,          &
+              stash_levels, num_stash_levels+1)
+    END DO
+
+    ! Copy photol_rates into STASH work array
+    DO i = 1, jppj
+      item = 340 + i
+      CALL copydiag_3d(stashwork50(si(item,section,im_index):                  &
+              si_last(item,section,im_index)),                                 &
+              photol_rates(:,:,:,i),                                           &
+              row_length, rows, model_levels,                                  &
+              stlist(:,stindex(1,item,section,im_index)), len_stlist,          &
+              stash_levels, num_stash_levels+1)
+    END DO
 
     ! Copy rhs3d into STASH work array
     DO i = 1, jpspec
