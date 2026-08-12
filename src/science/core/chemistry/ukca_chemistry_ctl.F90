@@ -65,7 +65,8 @@ SUBROUTINE ukca_chemistry_ctl(                                                 &
                 L_stratosphere, firstcall,                                     &
                 ncsteps3d,                                                     &
                 rhs3d,                                                         &
-                zftr3d                                                         &
+                zftr3d,                                                        &
+                zdryrt3d                                                       &
                 )
 
 USE asad_mod,             ONLY: advt, cdt, ctype, rhs,                         &
@@ -172,6 +173,9 @@ REAL, INTENT(OUT) :: rhs3d(theta_field_size,model_levels,jpspec)
 
 ! Tracer concentration
 REAL, INTENT(OUT) :: zftr3d(theta_field_size,model_levels,jpspec)
+
+! Dry deposition
+REAL, INTENT(OUT) :: zdryrt3d(theta_field_size,model_levels,jpdd)
 
 ! Local variables
 INTEGER :: ix            ! dummy variable
@@ -313,6 +317,7 @@ DO k=1,model_levels
       zdryrt2(:,:) = zdryrt(:,:)
     END IF
   END IF
+  zdryrt3d(:,k,:) = zdryrt2
 
   ! Put tracer mmr into 1-D array for use in ASAD chemical solver
   zq(:) = q(kcs:kce)/c_h2o

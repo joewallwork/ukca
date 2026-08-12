@@ -65,7 +65,8 @@ SUBROUTINE ukca_chemistry_ctl_full(                                            &
                 co2_interactive, firstcall,                                    &
                 ncsteps3d,                                                     &
                 rhs3d,                                                         &
-                zftr3d                                                         &
+                zftr3d,                                                        &
+                zdryrt3d                                                       &
                 )
 
 USE asad_mod,             ONLY: advt, cdt, ctype,                              &
@@ -175,6 +176,9 @@ REAL, INTENT(OUT) :: rhs3d(tot_n_pnts,jpspec)
 
 ! Tracer concetration
 REAL, INTENT(OUT) :: zftr3d(tot_n_pnts,jpspec)
+
+! Dry deposition
+REAL, INTENT(OUT) :: zdryrt3d(tot_n_pnts,jpspec)
 
 ! Local variables
 INTEGER :: ix            ! dummy variable
@@ -295,6 +299,7 @@ IF (ukca_config%l_ukca_intdd) THEN
 ELSE    ! non-interactive
   zdryrt2(1:theta_field_size,:) = zdryrt(:,:)
 END IF
+zdryrt3d(:,:) = zdryrt
 
 ! Convert mmr into vmr for tracers.
 ! If running with nontransport RO2 species, data for the RO2 species

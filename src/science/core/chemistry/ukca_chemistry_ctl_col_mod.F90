@@ -64,7 +64,8 @@ SUBROUTINE ukca_chemistry_ctl_col(                                             &
                 zdryrt, zwetrt, nlev_with_ddep,                                &
                 ncsteps3d,                                                     &
                 rhs3d,                                                         &
-                zftr3d                                                         &
+                zftr3d,                                                        &
+                zdryrt3d                                                       &
                 )
 
 USE asad_mod,             ONLY: advt, cdt, ctype, ncsteps_stashed,             &
@@ -189,6 +190,9 @@ REAL, INTENT(OUT) :: rhs3d(row_length,rows,model_levels,jpspec)
 
 ! Tracer concentration array
 REAL, INTENT(OUT) :: zftr3d(row_length,rows,model_levels,jpspec)
+
+! Dry deposition
+REAL, INTENT(OUT) :: zdryrt3d(row_length,rows,model_levels,jpspec)
 
 ! Local variables
 INTEGER :: i             ! Loop variable
@@ -343,6 +347,7 @@ DO i=1,rows
     ELSE    ! non-interactive
       zdryrt2(1,:) = zdryrt(j,i,:)
     END IF
+    zdryrt3d(j,i,:,:) = zdryrt2
 
     !       Put pressure, temperature and tracer mmr into 1-D arrays
     !       for use in ASAD chemical solver
