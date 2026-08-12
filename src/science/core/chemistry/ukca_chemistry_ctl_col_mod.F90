@@ -63,7 +63,8 @@ SUBROUTINE ukca_chemistry_ctl_col(                                             &
                 H_plus_3d_arr,                                                 &
                 zdryrt, zwetrt, nlev_with_ddep,                                &
                 ncsteps3d,                                                     &
-                rhs3d                                                          &
+                rhs3d,                                                         &
+                zftr3d                                                         &
                 )
 
 USE asad_mod,             ONLY: advt, cdt, ctype, ncsteps_stashed,             &
@@ -185,6 +186,9 @@ REAL, INTENT(OUT) :: ncsteps3d(row_length,rows,model_levels)
 
 ! Linear system RHS in each grid-box
 REAL, INTENT(OUT) :: rhs3d(row_length,rows,model_levels,jpspec)
+
+! Tracer concentration array
+REAL, INTENT(OUT) :: zftr3d(row_length,rows,model_levels,jpspec)
 
 ! Local variables
 INTEGER :: i             ! Loop variable
@@ -412,6 +416,9 @@ DO i=1,rows
         END DO     ! Close loop through RO2 species
       END IF       ! Close IF RO2_NTP
     END DO         ! Close loop through all species
+
+    ! Stash zftr values
+    zftr3d(j,i,kcs:kce,:) = zftr
 
     ! Check we have the correct number of active chemical species
     IF (ukca_config%l_ukca_ro2_ntp) THEN

@@ -64,7 +64,8 @@ SUBROUTINE ukca_chemistry_ctl(                                                 &
                 zdryrt, zwetrt, nlev_with_ddep, co2_interactive,               &
                 L_stratosphere, firstcall,                                     &
                 ncsteps3d,                                                     &
-                rhs3d                                                          &
+                rhs3d,                                                         &
+                zftr3d                                                         &
                 )
 
 USE asad_mod,             ONLY: advt, cdt, ctype, rhs,                         &
@@ -168,6 +169,9 @@ REAL, INTENT(OUT) :: ncsteps3d(theta_field_size,model_levels)
 
 ! Linear system RHS in each grid-box
 REAL, INTENT(OUT) :: rhs3d(theta_field_size,model_levels,jpspec)
+
+! Tracer concentration
+REAL, INTENT(OUT) :: zftr3d(theta_field_size,model_levels,jpspec)
 
 ! Local variables
 INTEGER :: ix            ! dummy variable
@@ -533,6 +537,9 @@ DO k=1,model_levels
       END DO   ! Close loop through RO2 species
     END IF     ! Close IF RO2_NTP
   END DO       ! Close loop through all species
+
+  ! Stash zftr values
+  zftr3d(:,k,:) = zftr
 
   ! Set SS species concentrations for output (stratospheric configurations)
 

@@ -588,6 +588,10 @@ REAL :: rhs3d(ukca_config%row_length, &
               ukca_config%rows, &
               ukca_config%model_levels, &
               jpspec)
+REAL :: zftr3d(ukca_config%row_length, &
+               ukca_config%rows, &
+               ukca_config%model_levels, &
+               jpspec)
 
 CHARACTER(LEN=*), PARAMETER :: RoutineName='UKCA_MAIN1'
 
@@ -2384,7 +2388,8 @@ IF (ukca_config%l_ukca_chem) THEN
            zdryrt, zwetrt, nlev_with_ddep, L_stratosphere, co2_interactive,    &
            l_firstchem,                                                        &
            ncsteps3d,                                                          &
-           rhs3d                                                               &
+           rhs3d,                                                              &
+           zftr3d                                                              &
            )
 
     ELSE IF (ukca_config%l_ukca_asad_columns) THEN
@@ -2423,7 +2428,8 @@ IF (ukca_config%l_ukca_chem) THEN
            H_plus_3d_arr,                                                      &
            zdryrt, zwetrt, nlev_with_ddep,                                     &
            ncsteps3d,                                                          &
-           rhs3d                                                               &
+           rhs3d,                                                              &
+           zftr3d                                                              &
            )
 
     ELSE
@@ -2462,7 +2468,8 @@ IF (ukca_config%l_ukca_chem) THEN
            zdryrt, zwetrt, nlev_with_ddep, co2_interactive, L_stratosphere,    &
            l_firstchem,                                                        &
            ncsteps3d,                                                          &
-           rhs3d                                                               &
+           rhs3d,                                                              &
+           zftr3d                                                              &
            )
     END IF
 
@@ -2516,6 +2523,17 @@ IF (ukca_config%l_ukca_chem) THEN
       CALL copydiag_3d(stashwork50(si(item,section,im_index):                  &
               si_last(item,section,im_index)),                                 &
               photol_rates(:,:,:,i),                                           &
+              row_length, rows, model_levels,                                  &
+              stlist(:,stindex(1,item,section,im_index)), len_stlist,          &
+              stash_levels, num_stash_levels+1)
+    END DO
+
+    ! Copy tracer concentrations into STASH work array
+    DO i = 1, jpspec
+      item = 500 + i
+      CALL copydiag_3d(stashwork50(si(item,section,im_index):                  &
+              si_last(item,section,im_index)),                                 &
+              zftr3d(:,:,:,i),                                                 &
               row_length, rows, model_levels,                                  &
               stlist(:,stindex(1,item,section,im_index)), len_stlist,          &
               stash_levels, num_stash_levels+1)

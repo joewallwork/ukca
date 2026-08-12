@@ -64,7 +64,8 @@ SUBROUTINE ukca_chemistry_ctl_full(                                            &
                 zdryrt, zwetrt, nlev_with_ddep, L_stratosphere,                &
                 co2_interactive, firstcall,                                    &
                 ncsteps3d,                                                     &
-                rhs3d                                                          &
+                rhs3d,                                                         &
+                zftr3d                                                         &
                 )
 
 USE asad_mod,             ONLY: advt, cdt, ctype,                              &
@@ -171,6 +172,9 @@ REAL, INTENT(OUT) :: ncsteps3d(tot_n_pnts)
 
 ! Linear system RHS in each grid-box
 REAL, INTENT(OUT) :: rhs3d(tot_n_pnts,jpspec)
+
+! Tracer concetration
+REAL, INTENT(OUT) :: zftr3d(tot_n_pnts,jpspec)
 
 ! Local variables
 INTEGER :: ix            ! dummy variable
@@ -336,6 +340,9 @@ DO js = 1,jpspec
     END DO     ! Close loop through RO2 species
   END IF       ! Close IF RO2_NTP
 END DO         ! Close loop through all species
+
+! Stash zftr values
+zftr3d(:,:) = zftr
 
 ! Check we have the correct number of active chemical species
 IF (ukca_config%l_ukca_ro2_ntp) THEN
