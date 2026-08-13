@@ -2480,17 +2480,21 @@ IF (ukca_config%l_ukca_chem) THEN
            )
     END IF
 
-    ! Fields to write out via STASH:
-    ! - q_chem          (already handled - 00010)
+    ! Fields to write out via STASH for ML training:
+    ! - Water vapour, q (already handled - 00010)
     ! - qcf             (already handled - 00012)
     ! - qcl             (already handled - 00254)
     ! - cloud_frac      (already handled - 00266)
-    ! - p_theta_levels  (already handled - 00408)
-    ! - t_chem          (already handled - 16004)
-    ! - so4_sa          (already handled - TODO custom)
-    ! - co2_interactive (already handled - TODO custom)
+    ! - pressure        (already handled - 00408 - broken)
+    ! - temperature     (already handled - 16004 - broken)
+    ! - so4_sa          (custom - 50487)
+    ! - co2_interactive (custom - 50488)
     ! - L_stratosphere  (already handled as tropospheric mask - 50062)
-    ! - rk_full         (WIP - TODO STASH codes)
+    ! - Wet dep rates   (handled via asad_flux_dat - 50261-50294 - FIXME)
+    ! - Photol rates    (handled via asad_flux_dat - 50341-50400 - FIXME)
+    ! - Dry dep rates   (handled via asad_flux_dat - 50451-50484 - broken)
+    ! - Tracer conc.    (handled via asad_flux_dat - 50501-50587 - FIXME)
+    ! - rk_full         (handle  via asad_flux_dat - 50601-50905 - broken)
 
     ! Copy ncsteps3d into STASH work array
     section = UKCA_diag_sect
@@ -2511,67 +2515,23 @@ IF (ukca_config%l_ukca_chem) THEN
             stlist(:,stindex(1,item,section,im_index)), len_stlist,            &
             stash_levels, num_stash_levels+1)
 
-    ! Copy zwetrt into STASH work array
-    DO i = 1, jpdw
-      item = 260 + i
-      CALL copydiag_3d(stashwork50(si(item,section,im_index):                  &
-              si_last(item,section,im_index)),                                 &
-              zwetrt(:,:,:,i),                                                 &
-              row_length, rows, model_levels,                                  &
-              stlist(:,stindex(1,item,section,im_index)), len_stlist,          &
-              stash_levels, num_stash_levels+1)
-    END DO
+    ! ! Copy so4_sa into STASH work array
+    ! item = 407
+    ! CALL copydiag_3d(stashwork50(si(item,section,im_index):                    &
+    !         si_last(item,section,im_index)),                                   &
+    !         so4_sa(:,:,:),                                                     &
+    !         row_length, rows, model_levels,                                    &
+    !         stlist(:,stindex(1,item,section,im_index)), len_stlist,            &
+    !         stash_levels, num_stash_levels+1)
 
-    ! Copy photol_rates into STASH work array
-    DO i = 1, jppj
-      item = 340 + i
-      CALL copydiag_3d(stashwork50(si(item,section,im_index):                  &
-              si_last(item,section,im_index)),                                 &
-              photol_rates(:,:,:,i),                                           &
-              row_length, rows, model_levels,                                  &
-              stlist(:,stindex(1,item,section,im_index)), len_stlist,          &
-              stash_levels, num_stash_levels+1)
-    END DO
-
-    ! Copy so4_sa into STASH work array
-    item = 407
-    CALL copydiag_3d(stashwork50(si(item,section,im_index):                    &
-            si_last(item,section,im_index)),                                   &
-            so4_sa(:,:,:),                                                     &
-            row_length, rows, model_levels,                                    &
-            stlist(:,stindex(1,item,section,im_index)), len_stlist,            &
-            stash_levels, num_stash_levels+1)
-
-    ! Copy interactive CO2 into STASH work array
-    item = 408
-    CALL copydiag_3d(stashwork50(si(item,section,im_index):                    &
-            si_last(item,section,im_index)),                                   &
-            co2_interactive(:,:,:),                                            &
-            row_length, rows, model_levels,                                    &
-            stlist(:,stindex(1,item,section,im_index)), len_stlist,            &
-            stash_levels, num_stash_levels+1)
-
-    ! Copy dry deposition rates into STASH work array
-    DO i = 1, jpdd
-      item = 451 + i
-      CALL copydiag_3d(stashwork50(si(item,section,im_index):                  &
-              si_last(item,section,im_index)),                                 &
-              zdryrt3d(:,:,:,i),                                               &
-              row_length, rows, model_levels,                                  &
-              stlist(:,stindex(1,item,section,im_index)), len_stlist,          &
-              stash_levels, num_stash_levels+1)
-    END DO
-
-    ! Copy tracer concentrations into STASH work array
-    DO i = 1, jpspec
-      item = 500 + i
-      CALL copydiag_3d(stashwork50(si(item,section,im_index):                  &
-              si_last(item,section,im_index)),                                 &
-              zftr3d(:,:,:,i),                                                 &
-              row_length, rows, model_levels,                                  &
-              stlist(:,stindex(1,item,section,im_index)), len_stlist,          &
-              stash_levels, num_stash_levels+1)
-    END DO
+    ! ! Copy interactive CO2 into STASH work array
+    ! item = 408
+    ! CALL copydiag_3d(stashwork50(si(item,section,im_index):                    &
+    !         si_last(item,section,im_index)),                                   &
+    !         co2_interactive(:,:,:),                                            &
+    !         row_length, rows, model_levels,                                    &
+    !         stlist(:,stindex(1,item,section,im_index)), len_stlist,            &
+    !         stash_levels, num_stash_levels+1)
 
     ! Copy rhs3d into STASH work array
     DO i = 1, jpspec
