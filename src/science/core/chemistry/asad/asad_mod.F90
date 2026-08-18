@@ -897,7 +897,7 @@ CONTAINS
 
     ! Load the ML model from file
     CALL torch_model_load(ml_model, model_file_name, torch_kCPU, &
-                          device_index, requires_grad, .false.)
+                          device_index, requires_grad)
 
     initialised = .TRUE.
   END SUBROUTINE ml_setup
