@@ -130,7 +130,8 @@ USE asad_ftoy_mod, ONLY: asad_ftoy
 USE ftorch, ONLY: torch_model_forward
 USE ml_mod, ONLY: ml_setup, ml_normalize_inputs, ml_model, input_tensors, &
                   scalar_input_array, ftr_input_array, dryrt_input_array, &
-                  wetrt_input_array, prt_input_array, rchet_input_array
+                  wetrt_input_array, prt_input_array, rchet_input_array, &
+                  output_tensors, output_array
 IMPLICIT NONE
 
 
