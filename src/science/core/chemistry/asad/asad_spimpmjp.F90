@@ -575,7 +575,7 @@ IF (exit_code /= 0) THEN
   ! Log any additional halvings, i.e., under-estimates
   OPEN(UNIT=10, FILE="halvings.csv", STATUS="old", POSITION="append", &
       ACTION="write")
-  WRITE(UNIT=10, FMT="(I0,3(',',I0))") ix, jy, nlev, solver_iter
+  WRITE(UNIT=10, FMT="(I0,4(',',I0))") ix, jy, nlev, ncsteps, solver_iter
   CLOSE(UNIT=10)
 
   ! Solver has not found a solution.

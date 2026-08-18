@@ -863,16 +863,16 @@ CONTAINS
     LOGICAL(KIND=4), PARAMETER :: requires_grad = .TRUE.
     LOGICAL :: exists
 
+    ! Do not initialise twice
+    IF (initialised) THEN
+      RETURN
+    END IF
+
     ! Create a file for recording any additional halvings
     INQUIRE(FILE="halvings.csv", EXIST=exists)
     IF (.not. exists) THEN
       OPEN(UNIT=10, FILE="halvings.csv", STATUS="new", ACTION="write")
-      WRITE(UNIT=10, FMT="(3(A1,1x),A7)") "i", "j", "k", "ncsteps"
-    END IF
-
-    ! Do not initialise twice
-    IF (initialised) THEN
-      RETURN
+      WRITE(UNIT=10, FMT="(3(A1,','),A4,',',A4)") "i", "j", "k", "pred", "reqd"
     END IF
 
     ! Associate the tensors and arrays
