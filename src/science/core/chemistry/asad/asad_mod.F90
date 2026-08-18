@@ -262,6 +262,7 @@ INTEGER, SAVE :: maxfterms     ! maximum number of terms
                                ! involving fractional  products
 
 INTEGER, SAVE        :: timestep_iter = 0  ! timestepper iteration
+LOGICAL, SAVE        :: not_halved_yet = .TRUE.
 LOGICAL, PARAMETER   :: save_inputs = .TRUE.
 INTEGER, ALLOCATABLE :: ncsteps_full(:,:,:)
 REAL, ALLOCATABLE    :: bb_full(:,:,:,:)

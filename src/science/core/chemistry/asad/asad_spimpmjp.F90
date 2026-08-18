@@ -257,7 +257,7 @@ SUBROUTINE asad_spimpmjp(exit_code, ix, jy, nlev, n_points, location,          &
 USE asad_mod,           ONLY: ptol, peps, cdt, f, fdot, nitnr, nstst, y,       &
                               fj, nonzero_map, ltrig, jpcspf, spfj,            &
                               modified_map, nonzero_map_unordered,             &
-                              bb_full, save_inputs
+                              bb_full, save_inputs, not_halved_yet
 USE asad_sparse_vars,   ONLY: setup_spfuljac, spfuljac, spresolv2, splinslv2
 USE ukca_config_specification_mod, ONLY: ukca_config
 USE yomhook,            ONLY: lhook, dr_hook
@@ -464,13 +464,14 @@ DO iter=1,ukca_config%nrsteps
     END DO
   END IF
 
-  IF (iter == 1) THEN
+  IF (not_halved_yet .AND. iter == 1) THEN
     ! Stash the sparse Jacobian and RHS for a single grid-box during the first
     ! nonlinear solve, if requested
     IF (save_inputs .AND. ukca_config%l_ukca_asad_columns                      &
         .AND. ukca_config%ukca_chem_seg_size == 1) THEN
       bb_full(ix,jy,nlev,:) = G_f(1,:)
     END IF
+    not_halved_yet = .FALSE.
   END IF
 
   CALL splinslv2(n_points,G_f,f_incr,f_min,f_max,nonzero_map_unordered,        &

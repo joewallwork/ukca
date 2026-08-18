@@ -106,7 +106,8 @@ CONTAINS
 SUBROUTINE asad_spmjpdriv(ix,jy,nlev,n_points,num_iter)
 
 USE asad_mod, ONLY: cdt, f, jpcspf, jpspec, ltrig,                             &
-                    ncsteps, ncsteps_full, save_inputs, nitfg, speci, y
+                    ncsteps, ncsteps_full, save_inputs, nitfg, speci, y,       &
+                    not_halved_yet
 USE ukca_config_specification_mod, ONLY: ukca_config
 USE parkind1, ONLY: jprb, jpim
 USE yomhook, ONLY: lhook, dr_hook
@@ -157,6 +158,9 @@ CHARACTER(LEN=*), PARAMETER :: RoutineName='ASAD_SPMJPDRIV'
 
 !
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
+
+not_halved_yet = .TRUE.
+
 ncst = ncsteps
 ctrd = cdt
 ltrig=.FALSE.
