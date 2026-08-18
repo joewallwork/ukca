@@ -173,7 +173,9 @@ INTEGER :: nl
 INTEGER :: ifam
 INTEGER :: itr
 INTEGER :: iodd
-INTEGER :: ncsteps_tmp
+
+INTEGER :: ncsteps_tmp  ! Default number of chemistry steps
+INTEGER :: nhsteps      ! Predicted number of halving steps
 
 INTEGER :: num_iter ! To store no.of iterations by chem solver
 
@@ -195,6 +197,9 @@ REAL(KIND=jprb)               :: zhook_handle
 CHARACTER(LEN=*), PARAMETER :: RoutineName='ASAD_CDRIVE'
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
+
+! Stash default value of ncsteps
+ncsteps_tmp = ncsteps
 
 ! Load the ML model
 num_inputs(1) = 9
@@ -234,8 +239,8 @@ CALL ml_normalize_inputs()
 
 ! Run inference to predict the number of halving steps
 CALL torch_model_forward(ml_model, input_tensors, output_tensors)
-ncsteps_tmp = ncsteps
-ncsteps = MAXVAL(output_array)
+nhsteps = MAXVAL(output_array)
+ncsteps = 2 ** nhsteps
 
 !       1.  Initialise variables and arrays
 
@@ -475,6 +480,7 @@ IF ( lvmr ) THEN
   END DO
 END IF
 
+! Reset default value of ncsteps
 ncsteps = ncsteps_tmp
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)

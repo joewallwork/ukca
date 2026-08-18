@@ -162,8 +162,11 @@ ctrd = cdt
 ltrig=.FALSE.
 !
 CALL asad_diffun( n_points )
-!
-iredo = 1
+
+! Apply timestep halving prediction
+iredo = ncsteps
+cdt = cdt / ncsteps
+
 f_initial(1:n_points,:)=f(1:n_points,:)
 !
 IF (ukca_config%l_ukca_asad_columns) THEN
