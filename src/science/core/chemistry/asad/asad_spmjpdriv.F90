@@ -176,6 +176,10 @@ END IF
 num_iter = 0
 iter = 1
 DO WHILE (iter <= iredo)
+
+  ! Pass current ncsteps into solver_iter for diagnostics
+  solver_iter = iredo
+
   CALL asad_spimpmjp(exit_code, ix, jy, nlev, n_points, location, solver_iter)
   num_iter = num_iter + solver_iter
 

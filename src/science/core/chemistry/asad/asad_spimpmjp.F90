@@ -279,7 +279,7 @@ INTEGER, INTENT(IN) :: jy
 INTEGER, INTENT(IN) :: nlev
 INTEGER, INTENT(IN) :: location
 INTEGER, INTENT(OUT):: exit_code
-INTEGER, INTENT(OUT):: solver_iter ! No. of iterations
+INTEGER, INTENT(INOUT):: solver_iter ! No. of iterations
 
 ! Local variables
 INTEGER, PARAMETER :: maxneg=2000     ! Max No. negatives allowed
@@ -572,6 +572,12 @@ END DO
 9999 CONTINUE
 
 IF (exit_code /= 0) THEN
+  ! Log any additional halvings, i.e., under-estimates
+  OPEN(UNIT=10, FILE="halvings.csv", STATUS="old", POSITION="append", &
+      ACTION="write")
+  WRITE(UNIT=10, FMT="(I0,3(',',I0))") ix, jy, nlev, solver_iter
+  CLOSE(UNIT=10)
+
   ! Solver has not found a solution.
   f = f_initial
   solver_iter = iter

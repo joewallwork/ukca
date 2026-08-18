@@ -250,7 +250,6 @@ END DO
 
 !       1.2  Copy pressure and temperature to asad_mod
 
-
 DO jl = 1, n_points
   p(jl) = pp(jl)
   t(jl) = pt(jl)
@@ -476,13 +475,6 @@ IF ( lvmr ) THEN
   END DO
 END IF
 
-! ! TODO: Log any additional halvings, i.e., under-estimates
-! IF (ncsteps /= ncsteps_tmp) THEN
-!   OPEN(UNIT=10, FILE="halvings.dat", STATUS="old", POSITION="append", &
-!       ACTION="write")
-!   WRITE(UNIT=10, FMT="(I0,4(',',I0))") ix, jy, nlev, ncsteps_tmp, ncsteps
-!   CLOSE(UNIT=10)
-! END IF
 ncsteps = ncsteps_tmp
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
