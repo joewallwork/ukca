@@ -440,7 +440,7 @@ DO iter=1,ukca_config%nrsteps
     ! Run inference to predict the number of halving steps
     CALL torch_model_forward(ml_model, input_tensors, output_tensors)
     nhsteps_predict = MAXVAL(output_array)
-    ncsteps_predict = 2 ** nhsteps
+    ncsteps_predict = 2 ** nhsteps_predict
     IF (ncsteps_predict /= ncsteps) THEN
       ncsteps = ncsteps_predict
       exit_code = -1

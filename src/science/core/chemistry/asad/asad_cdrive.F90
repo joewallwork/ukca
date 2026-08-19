@@ -128,8 +128,8 @@ USE asad_posthet_mod, ONLY: asad_posthet
 USE asad_ftoy_mod, ONLY: asad_ftoy
 
 USE ml_mod, ONLY: ml_setup, scalar_input_array, ftr_input_array,               &
-                  dryrt_input_array, wetrt_input_array, prt_input_array,       &
-                  rchet_input_array
+                  dryrt_input_array, wetrt_input_array, prt_input_array
+                  ! rchet_input_array
 IMPLICIT NONE
 
 
