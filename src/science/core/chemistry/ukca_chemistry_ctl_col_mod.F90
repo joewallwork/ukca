@@ -234,6 +234,8 @@ REAL :: fpsc2_full(model_levels)
 REAL :: prk_full(model_levels,jpnr)
 REAL :: y_full(model_levels,jpspec)
 
+REAL :: rchet_full(row_length,rows,model_levels,2)
+
 LOGICAL :: l_autotune_local
 LOGICAL :: stratflag(model_levels)
 LOGICAL :: have_nat1d(model_levels)
@@ -494,6 +496,7 @@ DO i=1,rows
       ELSE
         rc_het(:,:) = 0.0
       END IF
+      rchet_full(j,i,:,:) = rc_het
 
       have_nat1d(:) = have_nat3d(j,i,:)
 
@@ -763,6 +766,7 @@ IF (ALLOCATED(ystore)) DEALLOCATE(ystore)
 IF (save_inputs .AND. ukca_config%ukca_chem_seg_size == 1) THEN
   CALL write_nc_int32_3d("ncsteps", ncsteps_full)
   CALL write_nc_real64_4d("residual", bb_full)
+  CALL write_nc_real64_4d("rchet", rchet_full)
 END IF
 
 !$OMP END PARALLEL
