@@ -232,7 +232,7 @@ REAL :: dpw_full(model_levels,jpspec)
 REAL :: fpsc1_full(model_levels)
 REAL :: fpsc2_full(model_levels)
 REAL :: prk_full(model_levels,jpnr)
-REAL :: rk_full(model_levels,jpnr)
+REAL :: rk_full(row_length,rows,model_levels,jpnr)
 REAL :: y_full(model_levels,jpspec)
 
 REAL :: rchet_full(row_length,rows,model_levels,2)
@@ -353,10 +353,11 @@ IF (save_inputs .AND. ukca_config%ukca_chem_seg_size == 1) THEN
   CALL write_nc_real64_3d("water_vapour", q/c_h2o)
   CALL write_nc_real64_3d("cloud_frac", cloud_frac)
   CALL write_nc_real64_3d("qcl", qcl)
+  CALL write_nc_real64_3d("qcf", qcf)
   CALL write_nc_real64_3d("dryrt", zdryrt)
   ! CALL write_nc_real64_3d("ph", H_plus_3d_arr)     ! constant
   ! CALL write_nc_real64_3d("co2", co2_interactive)  ! undefined
-  ! CALL write_nc_real64_3d("so4_sa", so4_sa)        ! FIXME: causes segfault
+  CALL write_nc_real64_3d("so4_sa", so4_sa)
   CALL write_nc_real64_3d("cell_volume", volume)
   CALL write_nc_real64_4d("photol_rates", photol_rates)
   CALL write_nc_real64_4d("tracer", tracer)
@@ -569,7 +570,7 @@ DO i=1,rows
         fpsc1_full(kcs:kce)=fpsc1(1:chunk_size)
         fpsc2_full(kcs:kce)=fpsc2(1:chunk_size)
         prk_full(kcs:kce,:)=prk(1:chunk_size,:)
-        rk_full(kcs:kce,:)=rk(1:chunk_size,:)
+        rk_full(j,i,kcs:kce,:)=rk(1:chunk_size,:)
         y_full(kcs:kce,:)=y(1:chunk_size,:)
 
         IF (ukca_config%l_ukca_het_psc) THEN
@@ -746,7 +747,7 @@ DO i=1,rows
          ((L_asad_use_flux_rxns .OR. L_asad_use_rxn_rates) .OR.                &
          (L_asad_use_wetdep .OR. L_asad_use_drydep)))                          &
          CALL asad_chemical_diagnostics(row_length,rows,model_levels,          &
-            model_levels,dpd_full,dpw_full,prk_full,rk_full,y_full,            &
+            model_levels,dpd_full,dpw_full,prk_full,rk_full(j,i,:,:),y_full,   &
             j,i,klevel,volume,ierr)
 
       ! PSC diagnostics
@@ -768,7 +769,8 @@ IF (ALLOCATED(ystore)) DEALLOCATE(ystore)
 IF (save_inputs .AND. ukca_config%ukca_chem_seg_size == 1) THEN
   CALL write_nc_int32_3d("ncsteps", ncsteps_full)
   CALL write_nc_real64_4d("residual", bb_full)
-  CALL write_nc_real64_4d("rchet", rchet_full)
+  ! CALL write_nc_real64_4d("rchet", rchet_full) ! everywhere zero
+  CALL write_nc_real64_4d("rk", rk_full)
 END IF
 
 !$OMP END PARALLEL
