@@ -206,6 +206,12 @@ DO WHILE (iter <= iredo)
     CALL asad_diffun( n_points )
     iter = 1
   ELSE
+    ! Go straight to predicted number of halvings
+    ! NOTE: Assumes ncsteps started at 1
+    IF (exit_code == -1) THEN
+      cdt = cdt / ncsteps
+      iredo = ncsteps
+    END IF
     !
     !  Reset for failed convergence
     IF (exit_code > 1) THEN

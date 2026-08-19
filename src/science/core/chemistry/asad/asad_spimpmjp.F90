@@ -257,6 +257,9 @@ SUBROUTINE asad_spimpmjp(exit_code, ix, jy, nlev, n_points, location,          &
 USE asad_mod,           ONLY: ptol, peps, cdt, f, fdot, nitnr, nstst, y,       &
                               fj, nonzero_map, ltrig, jpcspf, spfj,            &
                               modified_map, nonzero_map_unordered, ncsteps
+USE ftorch,             ONLY: torch_model_forward
+USE ml_mod,             ONLY: ml_model, ml_normalize_inputs, input_tensors,    &
+                              output_tensors, output_array
 USE asad_sparse_vars,   ONLY: setup_spfuljac, spfuljac, spresolv2, splinslv2
 USE ukca_config_specification_mod, ONLY: ukca_config
 USE yomhook,            ONLY: lhook, dr_hook
@@ -302,6 +305,9 @@ REAL :: deltt
 REAL :: damp1
 REAL :: error_norm
 REAL :: residual_error
+
+INTEGER :: nhsteps_predict ! Predicted number of halving steps
+INTEGER :: ncsteps_predict ! Predicted number of chemistry steps
 
 LOGICAL :: not_first_call = .FALSE.
 
@@ -422,6 +428,25 @@ DO iter=1,ukca_config%nrsteps
   ! Calculate G_f = (f(t=n+1) - f(t=n))/dt - fdot.
   ! Find f(t=n+1) such that G_f = 0.
   G_f = (f - f_initial)*deltt - fdot
+
+  ! If halving hasn't been applied yet, predict the number of halvings
+  ! NOTE: Assumes ncsteps started at 1
+  IF (ncsteps == 1) THEN
+    ! TODO: residual_input_array(:,:) = G_f
+
+    ! Normalise inputs
+    CALL ml_normalize_inputs()
+
+    ! Run inference to predict the number of halving steps
+    CALL torch_model_forward(ml_model, input_tensors, output_tensors)
+    nhsteps_predict = MAXVAL(output_array)
+    ncsteps_predict = 2 ** nhsteps
+    IF (ncsteps_predict /= ncsteps) THEN
+      ncsteps = ncsteps_predict
+      exit_code = -1
+      GO TO 9999
+    END IF
+  END IF
 
   ! Calculate residual error (the relative magnitude of G_f)
   CALL calc_residual_error(n_points,residual_error,G_f,f_min)
@@ -571,12 +596,15 @@ END DO
 
 9999 CONTINUE
 
-IF (exit_code /= 0) THEN
-  ! Log any additional halvings, i.e., under-estimates
+! Log any additional halvings, i.e., under-estimates
+IF (exit_code > 0) THEN
   OPEN(UNIT=10, FILE="halvings.csv", STATUS="old", POSITION="append", &
       ACTION="write")
   WRITE(UNIT=10, FMT="(I0,4(',',I0))") ix, jy, nlev, ncsteps, solver_iter
   CLOSE(UNIT=10)
+END IF
+
+IF (exit_code /= 0) THEN
 
   ! Solver has not found a solution.
   f = f_initial

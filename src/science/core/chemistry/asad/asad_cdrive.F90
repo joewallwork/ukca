@@ -127,11 +127,9 @@ USE ukca_photol_mod, ONLY: ukca_photol
 USE asad_posthet_mod, ONLY: asad_posthet
 USE asad_ftoy_mod, ONLY: asad_ftoy
 
-USE ftorch, ONLY: torch_model_forward
-USE ml_mod, ONLY: ml_setup, ml_normalize_inputs, ml_model, input_tensors, &
-                  scalar_input_array, ftr_input_array, dryrt_input_array, &
-                  wetrt_input_array, prt_input_array, rchet_input_array, &
-                  output_tensors, output_array
+USE ml_mod, ONLY: ml_setup, scalar_input_array, ftr_input_array,               &
+                  dryrt_input_array, wetrt_input_array, prt_input_array,       &
+                  rchet_input_array
 IMPLICIT NONE
 
 
@@ -175,9 +173,6 @@ INTEGER :: ifam
 INTEGER :: itr
 INTEGER :: iodd
 
-INTEGER :: ncsteps_tmp  ! Default number of chemistry steps
-INTEGER :: nhsteps      ! Predicted number of halving steps
-
 INTEGER :: num_iter ! To store no.of iterations by chem solver
 
 INTEGER :: num_inputs(6)
@@ -198,9 +193,6 @@ REAL(KIND=jprb)               :: zhook_handle
 CHARACTER(LEN=*), PARAMETER :: RoutineName='ASAD_CDRIVE'
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
-
-! Stash default value of ncsteps
-ncsteps_tmp = ncsteps
 
 ! Load the ML model
 num_inputs(1) = 9
@@ -233,15 +225,7 @@ ftr_input_array(:,:) = ftr
 dryrt_input_array(:,:) = dryrt
 wetrt_input_array(:,:) = wetrt
 prt_input_array(:,:) = prt
-rchet_input_array(:,:) = rc_het
-
-! Normalise inputs
-CALL ml_normalize_inputs()
-
-! Run inference to predict the number of halving steps
-CALL torch_model_forward(ml_model, input_tensors, output_tensors)
-nhsteps = MAXVAL(output_array)
-ncsteps = 2 ** nhsteps
+rchet_input_array(:,:) = rc_het  ! TODO: Replace with residual
 
 !       1.  Initialise variables and arrays
 
@@ -480,9 +464,6 @@ IF ( lvmr ) THEN
     END DO
   END DO
 END IF
-
-! Reset default value of ncsteps
-ncsteps = ncsteps_tmp
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
 RETURN
