@@ -259,7 +259,7 @@ USE asad_mod,           ONLY: ptol, peps, cdt, f, fdot, nitnr, nstst, y,       &
                               modified_map, nonzero_map_unordered, ncsteps
 USE ftorch,             ONLY: torch_model_forward
 USE ml_mod,             ONLY: ml_model, ml_normalize_inputs, input_tensors,    &
-                              output_tensors, output_array
+                              residual_input_array, output_tensors, output_array
 USE asad_sparse_vars,   ONLY: setup_spfuljac, spfuljac, spresolv2, splinslv2
 USE ukca_config_specification_mod, ONLY: ukca_config
 USE yomhook,            ONLY: lhook, dr_hook
@@ -432,7 +432,7 @@ DO iter=1,ukca_config%nrsteps
   ! If halving hasn't been applied yet, predict the number of halvings
   ! NOTE: Assumes ncsteps started at 1
   IF (ncsteps == 1) THEN
-    ! TODO: residual_input_array(:,:) = G_f
+    residual_input_array(:,:) = G_f
 
     ! Normalise inputs
     CALL ml_normalize_inputs()

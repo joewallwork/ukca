@@ -200,7 +200,8 @@ num_inputs(2) = jpcspf
 num_inputs(3) = jpdd
 num_inputs(4) = jpdw
 num_inputs(5) = jppj
-num_inputs(6) = 2
+! num_inputs(6) = 2
+num_inputs(6) = jpcspf
 call ml_setup(trim(model_file_name), num_inputs)
 
 ! Gather inputs
@@ -225,7 +226,7 @@ ftr_input_array(:,:) = ftr
 dryrt_input_array(:,:) = dryrt
 wetrt_input_array(:,:) = wetrt
 prt_input_array(:,:) = prt
-rchet_input_array(:,:) = rc_het  ! TODO: Replace with residual
+! rchet_input_array(:,:) = rc_het
 
 !       1.  Initialise variables and arrays
 

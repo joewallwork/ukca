@@ -841,7 +841,8 @@ MODULE ml_mod
   REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: dryrt_input_array
   REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: wetrt_input_array
   REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: prt_input_array
-  REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: rchet_input_array
+  REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: residual_input_array
+  ! REAL(KIND=wp), DIMENSION(:,:), ALLOCATABLE, TARGET :: rchet_input_array
   REAL(KIND=wp), DIMENSION(:), ALLOCATABLE, TARGET :: output_array
 
   ! FTorch data structures
@@ -882,21 +883,24 @@ CONTAINS
     ALLOCATE(dryrt_input_array(batch_size, num_inputs(3)))
     ALLOCATE(wetrt_input_array(batch_size, num_inputs(4)))
     ALLOCATE(prt_input_array(batch_size, num_inputs(5)))
-    ALLOCATE(rchet_input_array(batch_size, num_inputs(6)))
-    CALL torch_tensor_from_array(input_tensors(1), scalar_input_array, &
+    ! ALLOCATE(rchet_input_array(batch_size, num_inputs(6)))
+    ALLOCATE(residual_input_array(batch_size, num_inputs(6)))
+    CALL torch_tensor_from_array(input_tensors(1), scalar_input_array,         &
                                  torch_kCPU)
     CALL torch_tensor_from_array(input_tensors(2), ftr_input_array, torch_kCPU)
-    CALL torch_tensor_from_array(input_tensors(3), dryrt_input_array, &
+    CALL torch_tensor_from_array(input_tensors(3), dryrt_input_array,          &
                                  torch_kCPU)
-    CALL torch_tensor_from_array(input_tensors(4), wetrt_input_array, &
+    CALL torch_tensor_from_array(input_tensors(4), wetrt_input_array,          &
                                  torch_kCPU)
     CALL torch_tensor_from_array(input_tensors(5), prt_input_array, torch_kCPU)
-    CALL torch_tensor_from_array(input_tensors(6), rchet_input_array, &
+    CALL torch_tensor_from_array(input_tensors(6), residual_input_array,       &
                                  torch_kCPU)
+    ! CALL torch_tensor_from_array(input_tensors(6), rchet_input_array, &
+    !                              torch_kCPU)
     CALL torch_tensor_from_array(output_tensors(1), output_array, torch_kCPU)
 
     ! Load the ML model from file
-    CALL torch_model_load(ml_model, model_file_name, torch_kCPU, &
+    CALL torch_model_load(ml_model, model_file_name, torch_kCPU,               &
                           device_index, requires_grad)
 
     initialised = .TRUE.
