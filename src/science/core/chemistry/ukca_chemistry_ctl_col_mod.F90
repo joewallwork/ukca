@@ -762,7 +762,7 @@ IF (ALLOCATED(ystore)) DEALLOCATE(ystore)
 
 IF (save_inputs .AND. ukca_config%ukca_chem_seg_size == 1) THEN
   CALL write_nc_int32_3d("ncsteps", ncsteps_full)
-  CALL write_nc_real64_4d("rhs", bb_full)
+  CALL write_nc_real64_4d("residual", bb_full)
 END IF
 
 !$OMP END PARALLEL
