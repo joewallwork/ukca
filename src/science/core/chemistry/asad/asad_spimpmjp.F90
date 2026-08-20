@@ -114,10 +114,16 @@
 ! ######################################################################
 !
 MODULE asad_spimpmjp_mod
+USE asad_mod, ONLY: ptol
 
 IMPLICIT NONE
 
 CHARACTER(LEN=*), PARAMETER, PRIVATE :: ModuleName = 'ASAD_SPIMPMJP_MOD'
+
+LOGICAL, DIMENSION(:), ALLOCATABLE :: converged
+
+REAL, PARAMETER :: RelTol_residual_error = 1.0e-10 ! Relative tolerance for |G(f)|
+REAL, PARAMETER :: RelTol_error = 10*ptol          ! Relative tolerance for |f_incr|
 
 CONTAINS
 
@@ -173,6 +179,9 @@ USE asad_mod,            ONLY: prod, slos
 USE yomhook,             ONLY: lhook, dr_hook
 USE parkind1,            ONLY: jprb, jpim
 
+USE ereport_mod,            ONLY: ereport
+USE errormessagelength_mod, ONLY: errormessagelength
+
 IMPLICIT NONE
 
 INTEGER, INTENT(IN) :: n_points
@@ -181,7 +190,11 @@ REAL, INTENT(IN) :: G_f(1:n_points,1:jpcspf)
 REAL, INTENT(IN) :: f_min
 
 REAL :: tmprc(1:n_points,1:jpcspf)
+REAL :: scaled_residual
 INTEGER :: jl, jtr, j
+
+INTEGER :: errcode                ! Variable passed to ereport
+CHARACTER(LEN=errormessagelength) :: cmessage
 
 INTEGER(KIND=jpim), PARAMETER :: zhook_in  = 0
 INTEGER(KIND=jpim), PARAMETER :: zhook_out = 1
@@ -201,7 +214,16 @@ residual_error = 0.0
 DO jl=1,n_points
   DO jtr=1,jpcspf
     IF (ABS(tmprc(jl,jtr)) > f_min) THEN
-      residual_error=MAX(residual_error,ABS(G_f(jl,jtr)/tmprc(jl,jtr)))
+      scaled_residual = ABS(G_f(jl,jtr)/tmprc(jl,jtr))
+      IF (scaled_residual < RelTol_residual_error) THEN
+        converged(jl) = .TRUE.
+      ELSE IF (converged(jl)) THEN
+        ! Hypothesis testing
+        errcode=1
+        cmessage='Error norm convergence does not imply residual convergence'
+        CALL ereport('ASAD_SPMJPDRIV',errcode,cmessage)
+      END IF
+      residual_error = MAX(residual_error, scaled_residual)
     END IF
   END DO
 END DO
@@ -218,6 +240,9 @@ USE asad_mod,            ONLY: jpcspf
 USE yomhook,             ONLY: lhook, dr_hook
 USE parkind1,            ONLY: jprb, jpim
 
+USE ereport_mod,            ONLY: ereport
+USE errormessagelength_mod, ONLY: errormessagelength
+
 IMPLICIT NONE
 
 INTEGER, INTENT(IN) :: n_points
@@ -228,6 +253,10 @@ REAL, INTENT(IN)    :: f_min
 
 INTEGER :: jl
 INTEGER :: jtr
+REAL :: scaled_error_norm
+
+INTEGER :: errcode                ! Variable passed to ereport
+CHARACTER(LEN=errormessagelength) :: cmessage
 
 INTEGER(KIND=jpim), PARAMETER :: zhook_in  = 0
 INTEGER(KIND=jpim), PARAMETER :: zhook_out = 1
@@ -240,7 +269,16 @@ error_norm = 0.0
 DO jtr=1,jpcspf
   DO jl=1,n_points
     IF (ABS(f_incr(jl,jtr)) > 1.0e-16) THEN
-      error_norm = MAX(error_norm,ABS(f_incr(jl,jtr)/MAX(f(jl,jtr),f_min)))
+      scaled_error_norm = ABS(f_incr(jl,jtr) / MAX(f(jl,jtr),f_min))
+      IF (scaled_error_norm < RelTol_error) THEN
+        converged(jl) = .TRUE.
+      ELSE IF (converged(jl)) THEN
+        ! Hypothesis testing
+        errcode=1
+        cmessage='Residual convergence does not imply error norm convergence'
+        CALL ereport('ASAD_SPMJPDRIV',errcode,cmessage)
+      END IF
+      error_norm = MAX(error_norm, scaled_error_norm)
     END IF
   END DO
 END DO
@@ -254,7 +292,7 @@ END SUBROUTINE calc_error_norm
 SUBROUTINE asad_spimpmjp(exit_code, ix, jy, nlev, n_points, location,          &
                          solver_iter)
 
-USE asad_mod,           ONLY: ptol, peps, cdt, f, fdot, nitnr, nstst, y,       &
+USE asad_mod,           ONLY: peps, cdt, f, fdot, nitnr, nstst, y,             &
                               fj, nonzero_map, ltrig, jpcspf, spfj,            &
                               modified_map, nonzero_map_unordered,             &
                               bb_full, save_inputs, not_halved_yet
@@ -295,8 +333,6 @@ REAL :: ztmp
 ! The maximum concentration allowed was previously f_max = 1.0/f_min
 REAL, PARAMETER :: f_max = 1.0e30
 REAL :: f_min
-REAL :: RelTol_residual_error
-REAL :: RelTol_error
 REAL :: rafmin
 REAL :: rafmax
 REAL :: deltt
@@ -339,10 +375,10 @@ LOGICAL, SAVE :: first_pass = .TRUE.
 
 IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
 
-f_min = SQRT(peps) ! Minimum species concentration
+IF (.NOT. ALLOCATED(converged)) ALLOCATE(converged(n_points))
+converged(:) = .FALSE.
 
-RelTol_residual_error = 1.0e-10 ! Relative tolerance for |G(f)|
-RelTol_error = 10*ptol          ! Relative tolerance for |f_incr|
+f_min = SQRT(peps) ! Minimum species concentration
 
 ! Size of increment limiter
 rafmin = 1.0e-01
@@ -581,6 +617,8 @@ DO iter=1,ukca_config%nrsteps
 END DO
 
 9999 CONTINUE
+
+IF (ALLOCATED(converged)) DEALLOCATE(converged)
 
 IF (exit_code /= 0) THEN
   ! Solver has not found a solution.
